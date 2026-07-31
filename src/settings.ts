@@ -27,6 +27,20 @@ export const SETTINGS = {
     timeout: 5000, // v1 的 1000ms 过短易误判，放宽到 5s
     "max-failed-times": 3,
   },
+  /**
+   * 手机端（FlClash）url-test 参数：在桌面参数基础上放宽。
+   * interval 拉长到 10 分钟，减少后台唤醒次数以省电；
+   * tolerance 放宽到 80ms，避免移动网络抖动导致频繁切换节点、断连接。
+   */
+  MOBILE_URL_TEST_EXTRA: {
+    hidden: true,
+    url: "https://www.gstatic.com/generate_204",
+    interval: 600,
+    tolerance: 80,
+    lazy: true,
+    timeout: 5000,
+    "max-failed-times": 3,
+  },
   /** fallback 组的通用参数 */
   FALLBACK_TEST_EXTRA: {
     url: "https://www.gstatic.com/generate_204",

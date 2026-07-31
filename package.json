@@ -1,13 +1,14 @@
 {
   "name": "mihomo-proxy",
-  "version": "2.3.0",
-  "description": "Clash Verge Rev / Mihomo 配置增强脚本（vite + ts 模块化构建，双产物）",
+  "version": "2.4.0",
+  "description": "Clash Verge Rev / Mihomo / FlClash 配置增强脚本（vite + ts 模块化构建，三产物）",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "vite build && vite build --mode simple && node scripts/verify.mjs",
+    "build": "vite build && vite build --mode simple && vite build --mode flclash && node scripts/verify.mjs",
     "verify": "node scripts/verify.mjs",
     "verify:kernel": "node scripts/verify-kernel.mjs",
+    "verify:runtime": "node scripts/verify-runtime.mjs",
     "prettier": "prettier --write \"**/*.{js,ts,json,md}\""
   },
   "keywords": [],
