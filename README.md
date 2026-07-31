@@ -1,22 +1,26 @@
 # mihomo-proxy
 
-mihomo（Clash Meta）配置增强脚本 · Ultimate Stable Edition v2.3
+mihomo（Clash Meta）配置增强脚本 · Ultimate Stable Edition v2.4
 
-在 Sparkle（或 Clash Verge Rev 等兼容客户端）中作为**覆写脚本**加载，自动完成节点分组、服务级分流、DNS 防泄露分流与 TUN/Sniffer 网络优化。主要面向国内复杂网络（含校园网）与多地区机场订阅，目标是 Google 全家桶 / AI / 流媒体的高稳定性与零 DNS 泄露。
+在 Sparkle / Clash Verge Rev（电脑）或 FlClash（手机）中作为**覆写脚本**加载，自动完成节点分组、服务级分流、DNS 防泄露分流与 TUN/Sniffer 网络优化。主要面向国内复杂网络（含校园网）与多地区机场订阅，目标是 Google 全家桶 / AI / 流媒体的高稳定性与零 DNS 泄露。
 
 ---
 
-## 两个版本，按需选择
+## 三个版本，按需选择
 
-|                      | mihomo-proxy.js（完整版）                                    | simple-mihomo.js（极简版）         |
-| -------------------- | ------------------------------------------------------------ | ---------------------------------- |
-| 策略组数量           | 20+（地区组 + 服务组）                                       | 3 个                               |
-| 地区分组             | HK / TW / JP / SG / KR / US / EU / AU / AS + Other           | 无                                 |
-| 服务组               | Google / YouTube / AI / Telegram / Steam / Apple / Microsoft | 统一收敛到「全部」                 |
-| AI 纯净池            | ✅ 剔除香港                                                  | ✅ 剔除香港                        |
-| 广告拦截             | 固定 REJECT                                                  | 「广告拦截」组可切 REJECT / DIRECT |
-| 分流规则 / DNS / TUN | 同一套                                                       | 同一套                             |
-| 适合人群             | 想精细控制每类服务出口                                       | 只想选个节点就用                   |
+|                      | mihomo-proxy.js（完整版）                                    | simple-mihomo.js（极简版）         | flclash-mobile.js（手机版）        |
+| -------------------- | ------------------------------------------------------------ | ---------------------------------- | ---------------------------------- |
+| 目标客户端           | Sparkle / Clash Verge Rev                                    | Sparkle / Clash Verge Rev          | **FlClash**（安卓 / iOS / 桌面）   |
+| 策略组数量           | 20+（地区组 + 服务组）                                       | 3 个                               | 3 个                               |
+| 地区分组             | HK / TW / JP / SG / KR / US / EU / AU / AS + Other           | 无                                 | 无                                 |
+| 服务组               | Google / YouTube / AI / Telegram / Steam / Apple / Microsoft | 统一收敛到「全部」                 | 统一收敛到「全部」                 |
+| 节点纳入方式         | 脚本枚举节点名（可排序）                                     | 脚本枚举节点名（可排序）           | 内核 `include-all` 运行时纳入      |
+| proxy-providers 订阅 | 不支持（只读 `proxies`）                                     | 不支持                             | ✅ 支持                            |
+| 订阅增删节点         | 需重新应用脚本                                               | 需重新应用脚本                     | ✅ 自动跟随                        |
+| AI 纯净池            | ✅ 剔除香港                                                  | ✅ 剔除香港                        | ✅ 剔除香港                        |
+| 广告拦截             | 固定 REJECT                                                  | 「广告拦截」组可切 REJECT / DIRECT | 同极简版                           |
+| 分流规则 / DNS / TUN | 同一套                                                       | 同一套                             | 同一套                             |
+| 适合人群             | 想精细控制每类服务出口                                       | 只想选个节点就用                   | 手机上用，怕麻烦                   |
 
 ```text
 # 完整版
@@ -24,6 +28,9 @@ https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/mihomo-pr
 
 # 极简版
 https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/simple-mihomo.js
+
+# 手机版（FlClash）
+https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/flclash-mobile.js
 ```
 
 ---
@@ -55,6 +62,12 @@ https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/simple-mi
 - `全部`：所有节点 + 内置「自动测速」（默认自动选优）
 - `AI`：剔除香港的纯净节点池 + 独立自动测速
 - `广告拦截`：REJECT（默认）/ DIRECT / 全部
+
+手机版（FlClash）与极简版同名三组，区别在于节点不由脚本枚举，而是写
+`include-all: true` + `exclude-filter` 让**内核在运行时纳入**：订阅更新或机场
+增删节点后无需重新应用脚本，`proxy-providers` 型订阅也能正确分组，
+生成的配置里不含成百上千行节点名，手机上加载更快。测速间隔放宽到 600s、
+容差 80ms，降低后台唤醒频率与移动网络抖动导致的频繁切换。
 
 ### 3. DNS 架构（防泄露 Smart 分流）
 
@@ -93,15 +106,39 @@ https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/simple-mi
 
 ## 使用方法
 
-1. 打开 Sparkle（或 Clash Verge Rev 等兼容客户端）的「覆写 / 扩展脚本」设置
-2. 添加上方任一脚本链接（或下载后本地引用）
+### 电脑（Sparkle / Clash Verge Rev）
+
+1. 打开客户端的「覆写 / 扩展脚本」设置
+2. 添加完整版或极简版脚本链接（或下载后本地引用）
 3. 应用到订阅配置，重启内核（建议 TUN 模式）
 
-脚本会在订阅加载时自动：解析节点 → 重建 proxy-groups → 注入 rule-providers → 重写 dns / tun / sniffer / runtime。
+### 手机（FlClash）
+
+1. 设置 → 高级设置 → **脚本** → 添加 → 右上角可直接远程下载
+   `flclash-mobile.js` 的链接 → 保存
+2. 配置 → 选中你的订阅 → **覆写** → 模式选「**脚本**」→ 勾选刚添加的脚本
+3. 回到首页启动
+
+**必须核对的 App 设置**（这些字段由 FlClash 在脚本执行后强制改写，
+脚本内写什么都不生效，详见 `src/flclash-main.ts` 顶部注释）：
+
+| App 设置项                   | 应设为          | 不这么设的后果                                          |
+| ---------------------------- | --------------- | ------------------------------------------------------- |
+| 设置 → 网络 → **覆写 DNS**   | **关闭**（默认）| 打开会用 App 默认 DNS 整块替换本脚本的防泄露 DNS 架构    |
+| 设置 → 网络 → **追加系统 DNS** | **关闭**（默认）| 打开会向 `nameserver` 注入 `system://`，直接构成 DNS 泄露 |
+| 出站模式                     | 规则            | 全局 / 直连会绕开分流规则                               |
+| TUN 栈                       | mixed           | 其他栈在部分机型上兼容性较差                            |
+| 查找进程                     | off             | 手机端无进程规则，开启（App 默认 always）徒增开销       |
+
+其余如 log-level / ipv6 / 各端口 / tcp-concurrent / unified-delay /
+keep-alive-interval / 「记住选择」等，同样以 App 设置为准。
+被保留的部分是脚本的核心价值：分流规则、策略组、规则集、DNS、Sniffer、hosts。
+
+脚本会在订阅加载时自动：重建 proxy-groups → 注入 rule-providers → 重写 dns / tun / sniffer / runtime。
 
 ### 自定义
 
-自定义常量位于 `src/user-config.ts`（两版共享）：
+自定义常量位于 `src/user-config.ts`（三版共享）：
 
 ```ts
 /** 强制直连的域名（后缀匹配），示例：["mycompany.com", "internal.example"] */
@@ -114,9 +151,13 @@ export const CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3
 
 两种修改方式：
 
-1. **推荐**：改 `src/user-config.ts` 后 `pnpm build` 重新生成（改动进入两份产物且不会丢失）
+1. **推荐**：改 `src/user-config.ts` 后 `pnpm build` 重新生成（改动进入三份产物且不会丢失）
 2. **临时**：直接编辑产物 JS 顶部的同名常量（在 IIFE 内第一段）——注意
    下次 `pnpm build` 会覆盖手改内容
+
+手机版的 `CUSTOM_FILTER` 会被编译进策略组的 `exclude-filter`（由内核用
+regexp2 匹配），所以自定义时注意别让它命中「自动测速」「AI 自动测速」
+这两个组名，否则组内会缺少测速入口。
 
 ---
 
@@ -135,7 +176,17 @@ export const CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3
 将脚本中 TUN 的 `mtu: 1500` 下调为 `1280`。
 
 **Q：想改地区顺序 / 测速参数？**
-完整版调整 `SETTINGS.REGION_ORDER` 与 `URL_TEST_EXTRA`；极简版调整 `SETTINGS.URL_TEST_EXTRA`。
+完整版调整 `SETTINGS.REGION_ORDER` 与 `URL_TEST_EXTRA`；极简版调整 `SETTINGS.URL_TEST_EXTRA`；
+手机版调整 `SETTINGS.MOBILE_URL_TEST_EXTRA`。
+
+**Q：FlClash 里策略组是空的 / 只有 DIRECT？**
+先确认订阅本身有节点（配置页能看到节点列表）。手机版靠内核 `include-all` 纳入节点，
+只有当订阅既无 `proxies` 也无 `proxy-providers` 时才会回退成 DIRECT。
+若节点存在却被过滤光，检查 `CUSTOM_FILTER` 是否写得过宽（它会进 `exclude-filter`）。
+
+**Q：手机上 DNS 泄露测试仍显示国内解析商？**
+99% 是 App 的「覆写 DNS」或「追加系统 DNS」被打开了，见上文设置表格。
+这两项会在脚本执行之后改写 DNS 配置，脚本无法阻止。
 
 ---
 
@@ -143,6 +194,8 @@ export const CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3
 
 - 需要 mihomo（Clash Meta）内核；系统代理模式下 fake-ip 不生效，建议 TUN 模式
 - 会覆盖订阅中的 proxy-groups / rules / dns / tun / sniffer 配置
+- 手机版仅适用于支持 JS 覆写脚本的 **FlClash v0.8.85+**；Clash Meta for Android
+  等不提供脚本覆写能力的客户端无法使用（可改用其内置的覆写/配置合并功能）
 - 规则集使用 MetaCubeX meta-rules-dat 的 `.mrs` 格式，首次加载需联网下载
 - 脚本内多处注释标注了「顺序关键 / 语法注意」的段落（google-cn 顺序、
   nameserver-policy 单前缀写法等），修改前请先阅读注释，均为实测踩坑结论
@@ -154,26 +207,30 @@ export const CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3
 ```text
 mihomo-proxy.js    # 完整版（构建产物，请勿手改）
 simple-mihomo.js   # 极简版（构建产物，请勿手改）
-src/               # 两版共享的 TypeScript 源码
+flclash-mobile.js  # 手机版 / FlClash（构建产物，请勿手改）
+src/               # 三版共享的 TypeScript 源码
 ├── index.ts       #   完整版打包入口
 ├── simple.ts      #   极简版打包入口
+├── flclash.ts     #   手机版打包入口
 ├── main.ts        #   完整版主流程（服务级独立策略组）
 ├── simple-main.ts #   极简版主流程（全部 / AI / 广告拦截 三组）
-├── user-config.ts #   用户自定义区（两版共享）
+├── flclash-main.ts#   手机版主流程（同三组，节点走内核 include-all）
+├── user-config.ts #   用户自定义区（三版共享）
 ├── settings.ts    #   常量配置（SETTINGS / DNS_SERVERS / Fake-IP）
 ├── utils.ts       #   工具函数（倍率/线路解析缓存等）
 ├── regions.ts     #   地区定义（完整版用）
 ├── rule-providers.ts # 规则集（key ↔ 远端文件名解耦）
-├── rules.ts       #   分流规则骨架（出口目标参数化，两版注入各自策略组名）
+├── rules.ts       #   分流规则骨架（出口目标参数化，三版注入各自策略组名）
 ├── proxies.ts     #   节点分类
 ├── proxy-groups.ts#   完整版策略组生成
 ├── dns.ts         #   DNS 防泄露架构
 ├── runtime.ts     #   Runtime / Sniffer / TUN
 └── types.ts       #   类型定义
 tests/             # vitest 单元测试（工具函数 / 规则 / 节点分类）
-scripts/verify.mjs        # 第 1 级校验：node:vm 冒烟断言 + YAML 导出
-scripts/verify-kernel.mjs # 第 2 级校验：真实 mihomo 内核 -t
-vite.config.ts     # Vite 8 库模式双产物构建配置
+scripts/verify.mjs         # 第 1 级校验：node:vm 冒烟断言 + YAML 导出
+scripts/verify-kernel.mjs  # 第 2 级校验：真实 mihomo 内核 -t
+scripts/verify-runtime.mjs # 第 3 级校验：启动内核查 API，验策略组运行时成员
+vite.config.ts     # Vite 8 库模式三产物构建配置
 .github/workflows/ci.yml  # CI：类型检查 → 单测 → 构建 → 内核校验（发布闸门）→ 产物提交/一致性
 ```
 
@@ -181,8 +238,8 @@ vite.config.ts     # Vite 8 库模式双产物构建配置
 
 ## 构建与开发（Vite 8 全 Rust 工具链）
 
-两份产物均由 **Vite 8 + TypeScript** 从同一份 `src/` 构建生成——规则骨架、
-规则集、DNS、TUN 在源码层共享，**构建期即保证两版一致，不再手工同步**。
+三份产物均由 **Vite 8 + TypeScript** 从同一份 `src/` 构建生成——规则骨架、
+规则集、DNS、TUN 在源码层共享，**构建期即保证三版一致，不再手工同步**。
 Vite 8 已用 Rolldown（打包）+ Oxc（转换/压缩）的全 Rust 工具链取代
 esbuild + Rollup,本项目直接使用其原生配置（`rolldownOptions`）。
 
@@ -190,23 +247,45 @@ esbuild + Rollup,本项目直接使用其原生配置（`rolldownOptions`）。
 pnpm install        # 安装依赖（Node 20+ / pnpm 11+，lock 文件已入库）
 pnpm typecheck      # tsc 类型检查
 pnpm test           # vitest 单元测试
-pnpm build          # 双产物构建 → node:vm 冒烟断言 → 同步到仓库根目录
+pnpm build          # 三产物构建 → node:vm 冒烟断言 → 同步到仓库根目录
 pnpm verify:kernel  # 真实内核 -t 校验（需本地 mihomo 或设 MIHOMO_BIN）
+pnpm verify:runtime # 启动内核查 API，验 include-all / exclude-filter 实际生效
 ```
 
-构建约束（面向 Sparkle / Clash Verge Rev 的 boa_engine 运行时）：
+构建约束（面向 boa_engine 与 QuickJS 两种宿主运行时）：
 
 - 产物为**单文件普通脚本**（非 ESM），以 IIFE 打包并由 footer 注入顶层
-  `main(config, profileName)`，满足 `{script}; main(config, name)` 调用约定
-- target ES2020（boa 支持 90%+ 最新 ES 规范），`minify: false` 保留全部
-  中文注释，产物可读可审计
-- 双级校验后才同步产物：第 1 级 `node:vm` 裸沙箱断言（DNS 防泄露铁律、
-  规则集引用一致性、双版规则骨架一致、策略组完整性等），第 2 级真实
-  mihomo 内核 `-t` 配置测试；CI 对每次 push 全量执行并校验产物与源码一致
+  `main(config, profileName)`。Sparkle / Clash Verge Rev 以
+  `{script}; main(config, name)` 求值；FlClash（flutter_js → QuickJS）以
+  `{script}\nmain(config)` 求值，只传 1 个参数，同一份桥接同时满足两者
+- target ES2020（boa 与 QuickJS 均支持 90%+ 最新 ES 规范），`minify: false`
+  保留全部中文注释，产物可读可审计
+- 三级校验后才同步产物：第 1 级 `node:vm` 裸沙箱断言（DNS 防泄露铁律、
+  规则集引用一致性、三版规则骨架一致、策略组完整性、`exclude-filter`
+  匹配行为等），第 2 级真实 mihomo 内核 `-t` 配置测试，第 3 级实际启动
+  内核查 `/proxies` API 断言策略组运行时成员；CI 对每次 push 全量执行
+  并校验产物与源码一致
 
 ---
 
 ## 更新日志
+
+### v2.4（2026-07）
+
+- **新增手机版 `flclash-mobile.js`（FlClash 专用）**：与极简版同名三组、
+  同一套分流规则 / DNS 防泄露 / Sniffer 源码（构建期保证三版一致），
+  但节点改由内核 `include-all` + `exclude-filter` 在运行时纳入：
+  - 订阅更新、机场增删节点后无需重新应用脚本
+  - 支持 `proxy-providers` 型订阅（手机端常见，旧两版只读 `proxies` 会分组为空）
+  - 生成的配置不再内联成百上千行节点名，手机上加载更快
+  - 测速间隔 600s / 容差 80ms，降低后台唤醒与移动网络抖动导致的频繁切换
+- 适配 FlClash 运行时（flutter_js → QuickJS，`main(config)` 单参数调用）；
+  README 补充 FlClash 会在脚本执行后强制改写的字段清单与对应 App 设置指引
+  （「覆写 DNS」「追加系统 DNS」若被打开会破坏防泄露架构，属首要排查项）
+- 新增第 3 级校验 `pnpm verify:runtime`：实际启动内核并查 `/proxies` API，
+  断言 `include-all` 确实纳入订阅节点、不含 DIRECT/REJECT（否则自动测速会把
+  直连当成最快节点选中）、信息类节点与香港节点被正确排除——这类运行时行为
+  是 `-t` 配置测试的盲区
 
 ### v2.3（2026-07）
 
