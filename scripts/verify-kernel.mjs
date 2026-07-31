@@ -39,15 +39,26 @@ const findKernel = () => {
 
 const kernel = findKernel();
 if (!kernel) {
-  console.log("⊘ 未找到 mihomo 内核，跳过第 2 级校验（可设置 MIHOMO_BIN 指定路径）");
+  console.log(
+    "⊘ 未找到 mihomo 内核，跳过第 2 级校验（可设置 MIHOMO_BIN 指定路径）",
+  );
   process.exit(0);
 }
 
-const version = execFileSync(kernel, ["-v"], { encoding: "utf8" }).split("\n")[0];
+const version = execFileSync(kernel, ["-v"], { encoding: "utf8" }).split(
+  "\n",
+)[0];
 console.log(`内核：${version}`);
 
 let failed = false;
-for (const file of ["test-full.yaml", "test-simple.yaml", "test-full-empty.yaml", "test-simple-empty.yaml"]) {
+for (const file of [
+  "test-full.yaml",
+  "test-simple.yaml",
+  "test-flclash.yaml",
+  "test-full-empty.yaml",
+  "test-simple-empty.yaml",
+  "test-flclash-empty.yaml",
+]) {
   const cfg = path.join(distDir, file);
   if (!existsSync(cfg)) {
     console.error(`✗ ${file} 不存在，请先运行 pnpm build`);
@@ -62,7 +73,9 @@ for (const file of ["test-full.yaml", "test-simple.yaml", "test-full-empty.yaml"
     const line = out.trim().split("\n").pop();
     console.log(`✓ ${file} 内核 -t 通过：${line}`);
   } catch (e) {
-    console.error(`✗ ${file} 内核 -t 失败：\n${e.stdout || ""}${e.stderr || e.message}`);
+    console.error(
+      `✗ ${file} 内核 -t 失败：\n${e.stdout || ""}${e.stderr || e.message}`,
+    );
     failed = true;
   }
 }
