@@ -51,6 +51,20 @@ var __mihomoProxy = (function(exports) {
 			timeout: 5e3,
 			"max-failed-times": 3
 		},
+		/**
+		* 手机端（FlClash）url-test 参数：在桌面参数基础上放宽。
+		* interval 拉长到 10 分钟，减少后台唤醒次数以省电；
+		* tolerance 放宽到 80ms，避免移动网络抖动导致频繁切换节点、断连接。
+		*/
+		MOBILE_URL_TEST_EXTRA: {
+			hidden: true,
+			url: "https://www.gstatic.com/generate_204",
+			interval: 600,
+			tolerance: 80,
+			lazy: true,
+			timeout: 5e3,
+			"max-failed-times": 3
+		},
 		/** fallback 组的通用参数 */
 		FALLBACK_TEST_EXTRA: {
 			url: "https://www.gstatic.com/generate_204",
@@ -925,7 +939,8 @@ var __mihomoProxy = (function(exports) {
 	exports.main = main;
 	return exports;
 })({});
-// Sparkle / Clash Verge Rev (boa_engine) 入口桥接：脚本被求值后直接调用顶层 main
+// 宿主入口桥接：脚本被求值后直接调用顶层 main
+// （Sparkle / Clash Verge Rev 传 (config, profileName)，FlClash 只传 config）
 function main(config, profileName) {
 	return __mihomoProxy.main(config, profileName);
 }

@@ -1,22 +1,37 @@
 /**
-* simple-mihomo — 极简业务分流版 v1.2
+* flclash-mobile — FlClash（手机端）覆写脚本 v1.0
 * ------------------------------------------------------------------
-* mihomo-proxy.js 的极简姊妹版：保留全部业务分流与 DNS/TUN 优化，
-* 但策略组只有三个，节点不做地区分组，简洁好理解：
+* 与 simple-mihomo 同样的三个策略组、同一套业务分流 / DNS 防泄露 /
+* Sniffer 源码，但节点改由内核 include-all + 正则过滤在运行时纳入：
+* 订阅更新、机场加减节点后无需重新应用脚本，proxy-providers 型订阅
+* 也能正确分组，生成的配置不含几百行节点名，手机上加载更快。
 *
-*   全部     —— 所有节点（内置自动测速，默认自动选优）
-*   AI       —— 可访问 AI 服务的纯净节点（自动剔除香港）
+*   全部     —— 全部节点（自动测速打头，默认自动选优）
+*   AI       —— 排除香港的纯净节点池（OpenAI/Claude 常封锁 HK 出口）
 *   广告拦截 —— REJECT（默认拦截）/ DIRECT / 全部 三选一
 *
-* 业务分流规则与 mihomo-proxy.js 共享同一份源码模块（src/），
-* 构建期即保证两版规则/DNS 架构一致，不再手工同步。
+* ── 用法 ──────────────────────────────────────────────────────────
+* 设置 → 高级设置 → 脚本 → 添加 →（右上角可远程下载本脚本链接）→
+* 保存；再到 配置 → 对应订阅 → 覆写 → 模式选「脚本」→ 勾选本脚本。
+*
+* ── 必须在 App 内核对的设置（脚本无法覆盖，会被 App 强制改写）──────
+*  1. 设置 → 网络 →「覆写 DNS」保持【关闭】
+*     （打开会用 App 默认 DNS 整块替换本脚本的防泄露 DNS 架构）
+*  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
+*     （打开会向 nameserver 注入 system://，直接构成 DNS 泄露）
+*  3. 出站模式选「规则」；TUN 栈选 mixed；
+*     「查找进程」建议设为 off（手机上无进程规则，开启徒增开销）
+*  4. 上述之外，log-level / ipv6 / 各端口 / tcp-concurrent /
+*     unified-delay / keep-alive-interval / 记住选择 等，
+*     同样由 App 设置决定，脚本内的对应值不会生效。
+*
 * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
 *
 * 仓库地址：https://github.com/wchiway/mihomo-proxy
-* 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/simple-mihomo.js
-* 提醒：使用系统代理时 fake-ip 不会生效，建议使用 TUN 模式。
+* 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/flclash-mobile.js
+* 客户端：https://github.com/chen08209/FlClash
 */
-var __mihomoSimple = (function(exports) {
+var __mihomoFlClash = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region src/user-config.ts
 	/** 强制直连的域名（后缀匹配），示例：["mycompany.com", "internal.example"] */
@@ -100,75 +115,6 @@ var __mihomoSimple = (function(exports) {
 	/** Fake-IP 地址池 */
 	var FAKE_IP_RANGE = "198.18.0.1/16";
 	var FAKE_IP_RANGE6 = "fc00::/18";
-	//#endregion
-	//#region src/utils.ts
-	/** 数组去重并剔除 falsy */
-	var uniq = (arr = []) => [...new Set(arr.filter(Boolean))];
-	var _mulCache = /* @__PURE__ */ new Map();
-	/**
-	* 从节点名解析计费倍率（如 "0.2x" / "1倍" / "2X"）。
-	* 未标注时默认 1。用于策略组内自动排序。
-	*/
-	var parseMultiplier = (name = "") => {
-		const cached = _mulCache.get(name);
-		if (cached !== void 0) return cached;
-		let val = 1;
-		const m = String(name).match(/(\d+(?:\.\d+)?)\s*(?:x|倍|×|✕)/i);
-		if (m) {
-			const v = parseFloat(m[1]);
-			if (v > 0 && v < 100) val = v;
-		}
-		_mulCache.set(name, val);
-		return val;
-	};
-	var _lineCache = /* @__PURE__ */ new Map();
-	var LINE_TAGS = [
-		{
-			tag: "IEPL",
-			re: /IEPL/i
-		},
-		{
-			tag: "IPLC",
-			re: /IPLC/i
-		},
-		{
-			tag: "BGP",
-			re: /BGP/i
-		},
-		{
-			tag: "GAME",
-			re: /GAME|游戏|游戲/i
-		},
-		{
-			tag: "HOME",
-			re: /RESIDENT|HOME|住宅|家宽|家寬|原生|NATIVE/i
-		}
-	];
-	/** 解析节点线路类型（专线 / 游戏 / 家宽等），无标注返回 ""。 */
-	var parseLineType = (name = "") => {
-		const cached = _lineCache.get(name);
-		if (cached !== void 0) return cached;
-		let tag = "";
-		for (const t of LINE_TAGS) if (t.re.test(name)) {
-			tag = t.tag;
-			break;
-		}
-		_lineCache.set(name, tag);
-		return tag;
-	};
-	/** 线路优先级：专线(IEPL/IPLC) > BGP > 其他，数值越小越靠前。 */
-	var lineRank = (tag) => tag === "IEPL" || tag === "IPLC" ? 0 : tag === "BGP" ? 1 : 2;
-	/**
-	* 节点自动排序：先按线路质量，再按倍率升序（省流量优先），最后按名称。
-	* 让优质/低倍率线路稳定地出现在 select 组顶部。
-	*/
-	var sortProxyNames = (names = []) => names.slice().sort((a, b) => {
-		const lr = lineRank(parseLineType(a)) - lineRank(parseLineType(b));
-		if (lr !== 0) return lr;
-		const mr = parseMultiplier(a) - parseMultiplier(b);
-		if (mr !== 0) return mr;
-		return a.localeCompare(b);
-	});
 	//#endregion
 	//#region src/rule-providers.ts
 	/** GeoSite 域名类规则集：{ key: 内部逻辑名, file: 远端文件名 } */
@@ -322,6 +268,10 @@ var __mihomoSimple = (function(exports) {
 		return providers;
 	};
 	//#endregion
+	//#region src/utils.ts
+	/** 数组去重并剔除 falsy */
+	var uniq = (arr = []) => [...new Set(arr.filter(Boolean))];
+	//#endregion
 	//#region src/rules.ts
 	/**
 	* 构建静态规则。分流目标由 targets 注入。
@@ -391,28 +341,6 @@ var __mihomoSimple = (function(exports) {
 		if (!r || r.startsWith("#")) return false;
 		return /,DIRECT(?:,|$)/i.test(r);
 	});
-	//#endregion
-	//#region src/proxies.ts
-	/** 节点重名去冲突：追加 _1/_2… 后缀 */
-	var makeProxyNamesUnique = (proxies = []) => {
-		const used = /* @__PURE__ */ new Set();
-		const nextIdx = /* @__PURE__ */ new Map();
-		proxies.forEach((p) => {
-			if (!p || !p.name) return;
-			const base = String(p.name);
-			if (!used.has(base)) {
-				used.add(base);
-				nextIdx.set(base, 1);
-				return;
-			}
-			let idx = nextIdx.get(base) ?? 1;
-			let candidate = `${base}_${idx}`;
-			while (used.has(candidate)) candidate = `${base}_${++idx}`;
-			p.name = candidate;
-			used.add(candidate);
-			nextIdx.set(base, idx + 1);
-		});
-	};
 	//#endregion
 	//#region src/dns.ts
 	var applyDns = (cfg) => {
@@ -541,12 +469,39 @@ var __mihomoSimple = (function(exports) {
 		};
 	};
 	//#endregion
-	//#region src/simple-main.ts
+	//#region src/proxies.ts
+	/** 节点重名去冲突：追加 _1/_2… 后缀 */
+	var makeProxyNamesUnique = (proxies = []) => {
+		const used = /* @__PURE__ */ new Set();
+		const nextIdx = /* @__PURE__ */ new Map();
+		proxies.forEach((p) => {
+			if (!p || !p.name) return;
+			const base = String(p.name);
+			if (!used.has(base)) {
+				used.add(base);
+				nextIdx.set(base, 1);
+				return;
+			}
+			let idx = nextIdx.get(base) ?? 1;
+			let candidate = `${base}_${idx}`;
+			while (used.has(candidate)) candidate = `${base}_${++idx}`;
+			p.name = candidate;
+			used.add(candidate);
+			nextIdx.set(base, idx + 1);
+		});
+	};
+	//#endregion
+	//#region src/flclash-main.ts
 	/** 三个策略组的名称（规则出口统一引用这里，避免魔法字符串） */
 	var GROUPS = {
 		ALL: "全部",
 		AI: "AI",
 		ADBLOCK: "广告拦截"
+	};
+	/** 两个隐藏的自动测速组（供上面的 select 组引用） */
+	var AUTO = {
+		ALL: "自动测速",
+		AI: "AI 自动测速"
 	};
 	/** 香港节点识别（AI 组需剔除，OpenAI/Claude 等常封锁 HK 出口） */
 	var HK_FILTER = /香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰/i;
@@ -562,74 +517,129 @@ var __mihomoSimple = (function(exports) {
 		proxy: GROUPS.ALL
 	});
 	/**
-	* 从订阅节点得到两个节点池：
-	*   allNames —— 全部可用节点（剔除自定义过滤与信息类节点）
-	*   aiNames  —— AI 纯净池（在 allNames 基础上剔除香港；全被剔则回退 allNames）
+	* 取正则源码，空正则返回 ""。
+	* 空 RegExp 的 source 是 "(?:)"，直接拼进过滤器会匹配空串，
+	* 导致 exclude-filter 命中每一个节点名（组被清空）。
 	*/
-	var buildProxyPools = (proxies = []) => {
-		const allNames = sortProxyNames(uniq(proxies.filter((p) => p && p.name && !CUSTOM_FILTER.test(p.name) && !SETTINGS.INFO_FILTER.test(p.name)).map((p) => p.name)));
-		const nonHk = allNames.filter((n) => !HK_FILTER.test(n));
-		return {
-			allNames,
-			aiNames: nonHk.length ? nonHk : allNames
-		};
+	var filterSource = (re) => {
+		const src = re && re.source ? String(re.source) : "";
+		return !src || src === "(?:)" ? "" : src;
 	};
-	var buildSimpleProxyGroups = ({ allNames, aiNames }) => {
+	/**
+	* 合并多个正则为一条 exclude-filter。
+	*
+	* mihomo 的 filter / exclude-filter 由 dlclark/regexp2 编译（.NET 风格，
+	* 非 Go RE2），支持 `(?i)` 内联选项。这里统一包进非捕获组再前置 `(?i)`：
+	* 若写成 `(?i)a|b`，内联标志的作用域容易随实现产生歧义，
+	* `(?i)(?:a|b)` 则明确对全部分支生效。
+	* 返回空串表示不设置该字段（不能下发空字符串，会被当成匹配空串）。
+	*/
+	var buildExcludeFilter = (...regexps) => {
+		const parts = regexps.map(filterSource).filter(Boolean);
+		return parts.length ? `(?i)(?:${parts.join("|")})` : "";
+	};
+	/** 通用排除：机场信息类节点（到期/流量/官网）+ 用户自定义过滤 */
+	var EXCLUDE_COMMON = buildExcludeFilter(SETTINGS.INFO_FILTER, CUSTOM_FILTER);
+	/** AI 组排除：在通用排除基础上再剔除香港 */
+	var EXCLUDE_AI = buildExcludeFilter(SETTINGS.INFO_FILTER, CUSTOM_FILTER, HK_FILTER);
+	/** 仅在过滤器非空时写入字段，避免下发 `exclude-filter: ""` */
+	var withExclude = (group, filter) => filter ? {
+		...group,
+		"exclude-filter": filter
+	} : group;
+	/**
+	* 订阅是否提供了节点来源。
+	* proxies 与 proxy-providers 任一非空即可 —— provider 为 http 类型时
+	* 配置校验阶段尚未下载，节点数为 0 属正常，不能据此判空。
+	* 注：FlClash 在调用脚本前会把缺失的 proxy-providers 补成 {}，
+	* 所以这里必须判 key 数量而不是判是否存在。
+	*/
+	var hasProxySource = (cfg) => {
+		const proxies = Array.isArray(cfg.proxies) ? cfg.proxies : [];
+		const providers = cfg["proxy-providers"];
+		const providerCount = providers && typeof providers === "object" ? Object.keys(providers).length : 0;
+		return proxies.length > 0 || providerCount > 0;
+	};
+	/**
+	* 构建策略组。
+	*
+	* include-all 的内核语义（adapter/outboundgroup/parser.go）：
+	*   include-all = include-all-proxies + include-all-providers，
+	*   前者把 AllProxies 追加到 proxies 之后，后者把全部 proxy-providers
+	*   填进 use。AllProxies 只含订阅节点，不含 DIRECT / REJECT / 策略组名，
+	*   所以自动测速组不会把 DIRECT 当成"最快节点"选中。
+	*   过滤在 GroupBase.GetProxies 里做，对 proxies 与 providers 均生效。
+	*/
+	var buildMobileProxyGroups = (hasNodes) => {
 		const icon = (f) => SETTINGS.ICON_BASE + f;
-		const groups = [];
-		if (allNames.length) {
-			groups.push({
-				name: "自动测速",
-				type: "url-test",
-				proxies: allNames,
-				icon: icon("Auto.png"),
-				...SETTINGS.URL_TEST_EXTRA
-			});
-			groups.push({
+		if (!hasNodes) return [
+			{
 				name: GROUPS.ALL,
 				type: "select",
-				proxies: ["自动测速", ...allNames],
+				proxies: ["DIRECT"],
 				icon: icon("Global.png")
-			});
-		} else groups.push({
-			name: GROUPS.ALL,
-			type: "select",
-			proxies: ["DIRECT"],
-			icon: icon("Global.png")
-		});
-		if (aiNames.length) {
-			groups.push({
-				name: "AI 自动测速",
-				type: "url-test",
-				proxies: aiNames,
-				icon: icon("ChatGPT.png"),
-				...SETTINGS.URL_TEST_EXTRA
-			});
-			groups.push({
+			},
+			{
 				name: GROUPS.AI,
 				type: "select",
-				proxies: ["AI 自动测速", ...aiNames],
+				proxies: [GROUPS.ALL],
 				icon: icon("ChatGPT.png")
-			});
-		} else groups.push({
-			name: GROUPS.AI,
-			type: "select",
-			proxies: [GROUPS.ALL],
-			icon: icon("ChatGPT.png")
-		});
-		groups.push({
-			name: GROUPS.ADBLOCK,
-			type: "select",
-			proxies: [
-				"REJECT",
-				"DIRECT",
-				GROUPS.ALL
-			],
-			icon: icon("AdBlack.png")
-		});
-		return groups;
+			},
+			{
+				name: GROUPS.ADBLOCK,
+				type: "select",
+				proxies: [
+					"REJECT",
+					"DIRECT",
+					GROUPS.ALL
+				],
+				icon: icon("AdBlack.png")
+			}
+		];
+		return [
+			withExclude({
+				name: AUTO.ALL,
+				type: "url-test",
+				proxies: [],
+				"include-all": true,
+				icon: icon("Auto.png"),
+				...SETTINGS.MOBILE_URL_TEST_EXTRA
+			}, EXCLUDE_COMMON),
+			withExclude({
+				name: GROUPS.ALL,
+				type: "select",
+				proxies: [AUTO.ALL],
+				"include-all": true,
+				icon: icon("Global.png")
+			}, EXCLUDE_COMMON),
+			withExclude({
+				name: AUTO.AI,
+				type: "url-test",
+				proxies: [],
+				"include-all": true,
+				icon: icon("ChatGPT.png"),
+				...SETTINGS.MOBILE_URL_TEST_EXTRA
+			}, EXCLUDE_AI),
+			withExclude({
+				name: GROUPS.AI,
+				type: "select",
+				proxies: [AUTO.AI],
+				"include-all": true,
+				icon: icon("ChatGPT.png")
+			}, EXCLUDE_AI),
+			{
+				name: GROUPS.ADBLOCK,
+				type: "select",
+				proxies: [
+					"REJECT",
+					"DIRECT",
+					GROUPS.ALL
+				],
+				icon: icon("AdBlack.png")
+			}
+		];
 	};
-	function simpleMain(config) {
+	function flclashMain(config) {
 		config = config && typeof config === "object" ? config : {};
 		const originalProxies = Array.isArray(config.proxies) ? config.proxies : [];
 		const existingRules = Array.isArray(config.rules) ? config.rules : [];
@@ -643,8 +653,8 @@ var __mihomoSimple = (function(exports) {
 		};
 		config.rules = mergeRules(STATIC_RULES, pickDirectRules(existingRules));
 		makeProxyNamesUnique(originalProxies);
-		config["proxy-groups"] = buildSimpleProxyGroups(buildProxyPools(originalProxies));
 		if (originalProxies.length) config.proxies = originalProxies;
+		config["proxy-groups"] = buildMobileProxyGroups(hasProxySource(config));
 		applyRuntime(config);
 		applySniffer(config);
 		applyTun(config);
@@ -652,11 +662,11 @@ var __mihomoSimple = (function(exports) {
 		return config;
 	}
 	//#endregion
-	exports.main = simpleMain;
+	exports.main = flclashMain;
 	return exports;
 })({});
 // 宿主入口桥接：脚本被求值后直接调用顶层 main
 // （Sparkle / Clash Verge Rev 传 (config, profileName)，FlClash 只传 config）
 function main(config, profileName) {
-	return __mihomoSimple.main(config, profileName);
+	return __mihomoFlClash.main(config, profileName);
 }
