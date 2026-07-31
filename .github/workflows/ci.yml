@@ -31,7 +31,7 @@ jobs:
       - name: 单元测试
         run: pnpm test
 
-      - name: 构建双产物 + node:vm 冒烟断言
+      - name: 构建三产物 + node:vm 冒烟断言
         run: pnpm build
 
       # 内核校验必须先于产物提交：raw 链接即发布渠道，只有内核能抓到的
@@ -43,16 +43,21 @@ jobs:
           gunzip mihomo.gz && chmod +x mihomo
           MIHOMO_BIN=./mihomo pnpm verify:kernel
 
+      # 手机版靠内核 include-all 在运行时纳入节点，-t 查不到组成员，
+      # 需要真正跑起来查 API 才能确认过滤行为
+      - name: 策略组运行时成员校验
+        run: MIHOMO_BIN=./mihomo pnpm verify:runtime
+
       # main 分支：全部校验通过后自动提交产物；PR：仅检查一致性
       - name: 提交构建产物
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add mihomo-proxy.js simple-mihomo.js
+          git add mihomo-proxy.js simple-mihomo.js flclash-mobile.js
           git diff --cached --quiet || git commit -m "chore: 同步构建产物 [skip ci]"
           git push
 
       - name: 产物与源码一致性（PR 检查）
         if: github.event_name == 'pull_request'
-        run: git diff --exit-code mihomo-proxy.js simple-mihomo.js
+        run: git diff --exit-code mihomo-proxy.js simple-mihomo.js flclash-mobile.js
