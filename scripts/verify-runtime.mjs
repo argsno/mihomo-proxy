@@ -12,6 +12,8 @@
  *   2. exclude-filter 排除机场信息类节点
  *   3. AI 组排除香港节点，「全部」组保留香港节点
  *   4. 显式列出的自动测速组名没有被 exclude-filter 误伤
+ *   5. default-selected / empty-fallback / expected-status 被内核真正采纳
+ *      （这三个字段旧内核会静默忽略，`-t` 一样通过，只有查 API 才知道）
  *
  * 与 verify-kernel.mjs 一样：找不到内核则跳过（退出码 0）。
  * 需要联网（内核启动时会拉取 rule-providers）。
@@ -77,8 +79,25 @@ cfg["external-controller"] = API;
 cfg.tun = { ...(cfg.tun || {}), enable: false };
 cfg["mixed-port"] = 17890;
 cfg.dns = { ...cfg.dns, listen: "0.0.0.0:11053" };
+// 关掉选择持久化：否则 dist/cache.db 里上一轮的手动选择会盖掉
+// default-selected，让「默认选中自动测速」这条断言随缓存飘忽。
+cfg.profile = { ...(cfg.profile || {}), "store-selected": false };
 const probePath = path.join(distDir, "probe-flclash.yaml");
 writeFileSync(probePath, yaml.dump(cfg, { lineWidth: -1 }));
+
+/** v1.19.27 起才有 empty-fallback，v1.19.28 起才有 default-selected */
+const atLeast = (version, target) => {
+  const norm = (v) =>
+    String(v)
+      .replace(/^v/, "")
+      .split(".")
+      .map((n) => Number.parseInt(n, 10) || 0);
+  const [a, b] = [norm(version), norm(target)];
+  for (let i = 0; i < 3; i++) {
+    if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0);
+  }
+  return true;
+};
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const child = spawn(kernel, ["-d", distDir, "-f", probePath], {
@@ -87,10 +106,12 @@ const child = spawn(kernel, ["-d", distDir, "-f", probePath], {
 
 try {
   let ready = false;
+  let kernelVersion = "";
   for (let i = 0; i < 30; i++) {
     await wait(1000);
     try {
-      await (await fetch(`http://${API}/version`)).json();
+      const v = await (await fetch(`http://${API}/version`)).json();
+      kernelVersion = v.version ?? "";
       ready = true;
       break;
     } catch {
@@ -101,6 +122,7 @@ try {
     console.error("✗ 内核未能在 30s 内就绪（检查网络与端口占用）");
     process.exitCode = 1;
   } else {
+    console.log(`内核版本：${kernelVersion || "未知"}`);
     await wait(1500); // 等策略组初始化完成
     const { proxies } = await (await fetch(`http://${API}/proxies`)).json();
     const members = (name) => proxies[name]?.all ?? [];
@@ -135,6 +157,33 @@ try {
       "「全部」组保留香港节点",
     );
     assert(!ai.some((n) => /香港|🇭🇰/.test(n)), "AI 组已排除香港节点");
+
+    // ---- 只有新内核才认的字段：旧内核静默忽略且 `-t` 照样通过，
+    //      所以必须查 API 才能区分"写了"和"生效了" ----
+    assert(
+      proxies["自动测速"]?.expectedStatus === "204",
+      "expected-status=204 已被内核采纳（门户劫持的 200 不再算节点可用）",
+    );
+    if (atLeast(kernelVersion, "1.19.27")) {
+      assert(
+        proxies["自动测速"]?.emptyFallback === "DIRECT" &&
+          proxies["AI 自动测速"]?.emptyFallback === "DIRECT",
+        "empty-fallback=DIRECT 已生效（过滤后空组回退直连而非 COMPATIBLE）",
+      );
+    } else {
+      console.log(`⊘ 内核 ${kernelVersion} < v1.19.27，跳过 empty-fallback 断言`);
+    }
+    if (atLeast(kernelVersion, "1.19.28")) {
+      assert(
+        proxies["全部"]?.now === "自动测速" &&
+          proxies["AI"]?.now === "AI 自动测速",
+        "default-selected 已生效（默认选中自动测速组）",
+      );
+    } else {
+      console.log(
+        `⊘ 内核 ${kernelVersion} < v1.19.28，跳过 default-selected 断言`,
+      );
+    }
   }
 } finally {
   child.kill();

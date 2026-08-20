@@ -2,6 +2,14 @@
 // 1. Config —— 常量配置（集中管理，避免魔法值）
 // ============================================================
 
+/**
+ * 健康检查期望状态码。测速地址 generate_204 正常必回 204，
+ * 而内核默认 expected-status 为 `*`（任何响应都算通过），
+ * 酒店/校园网门户劫持返回 200 页面时节点会被误判为可用。
+ * 显式锁定 204 后，被劫持的链路会正确计入失败。
+ */
+const EXPECTED_STATUS = 204;
+
 export const SETTINGS = {
   /** Koolson/Qure 彩色图标库 */
   ICON_BASE:
@@ -26,6 +34,7 @@ export const SETTINGS = {
     lazy: true,
     timeout: 5000, // v1 的 1000ms 过短易误判，放宽到 5s
     "max-failed-times": 3,
+    "expected-status": EXPECTED_STATUS,
   },
   /**
    * 手机端（FlClash）url-test 参数：在桌面参数基础上放宽。
@@ -40,6 +49,7 @@ export const SETTINGS = {
     lazy: true,
     timeout: 5000,
     "max-failed-times": 3,
+    "expected-status": EXPECTED_STATUS,
   },
   /** fallback 组的通用参数 */
   FALLBACK_TEST_EXTRA: {
@@ -48,6 +58,7 @@ export const SETTINGS = {
     lazy: true,
     timeout: 5000,
     "max-failed-times": 3,
+    "expected-status": EXPECTED_STATUS,
   },
 
   /** 机场信息类节点（到期/官网/流量等）识别过滤器 */

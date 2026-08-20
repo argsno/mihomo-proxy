@@ -1,6 +1,6 @@
 # mihomo-proxy
 
-mihomo（Clash Meta）配置增强脚本 · Ultimate Stable Edition v2.4
+mihomo（Clash Meta）配置增强脚本 · Ultimate Stable Edition v3.0
 
 在 Sparkle / Clash Verge Rev（电脑）或 FlClash（手机）中作为**覆写脚本**加载，自动完成节点分组、服务级分流、DNS 防泄露分流与 TUN/Sniffer 网络优化。主要面向国内复杂网络（含校园网）与多地区机场订阅，目标是 Google 全家桶 / AI / 流媒体的高稳定性与零 DNS 泄露。
 
@@ -269,6 +269,47 @@ pnpm verify:runtime # 启动内核查 API，验 include-all / exclude-filter 实
 ---
 
 ## 更新日志
+
+### v3.0（2026-08）
+
+对齐内核 **v1.19.30**（当前稳定版）新增能力，并修掉两处配置层面的隐患。
+三版产物版本号统一为 v3.0（此前手机版单独记作 v1.0，同源产物版本不一致易误导）。
+
+- **DNS 补上直连解析这条路径**：新增 `direct-nameserver`（system + 国内 DoH）
+  与 `direct-nameserver-follow-policy: true`。此前默认 `nameserver` 是国际 DoH，
+  凡是「走直连但又不在 `nameserver-policy` 白名单里」的域名——用户
+  `BYPASS_DOMAINS`、`DOMAIN-KEYWORD,wegame`、`connectivity-check` 集合等——
+  解析都会绕到境外再经代理回来，慢且拿到境外 CDN 边缘节点。
+  follow-policy 保持开启是关键：google / gfw / AI 族即使被用户规则改判直连，
+  仍用国际 DoH 解析，不会退化成被污染的国内结果
+- **健康检查锁定 `expected-status: 204`**：测速地址是 `generate_204`，
+  而内核默认 `expected-status` 为 `*`（任何响应都算通过），
+  酒店 / 校园网门户劫持返回 200 页面时节点会被误判为可用
+- **手机版 include-all 测速组新增 `empty-fallback: DIRECT`**（内核 v1.19.27+）：
+  `CUSTOM_FILTER` 写太宽导致组被过滤空时，兜底在 App 里直接可见，
+  且与「无节点来源」分支的 DIRECT 回退一致
+  （另：内核的 `COMPATIBLE` 实为 `outbound.NewCompatible()` 返回的 `Direct`，
+  行为等同直连而非失败，源码注释中的旧说法已勘误）
+- **策略组新增 `default-selected`**（内核 v1.19.28+）：把「默认选中自动测速组」
+  写成显式语义，不再依赖内核 `selectedProxy()` 找不到选中项时返回
+  `proxies[0]` 的隐式行为，成员顺序调整时默认项不再跟着漂
+- **修复 sniffer 端口区间重叠**：HTTP 的 `8080-8880` 覆盖了 TLS 的 `8443`，
+  两者同为 TCP 且 `override-destination` 取值相反，重叠即行为不确定
+  （内核 v1.19.30 的 `coordinate TCP sniffers on overlapping ports` 才把
+  这类冲突理顺）。现拆为 `8080-8442` + `8444-8880`，8443 单独留给 TLS
+- 新增 `xai` 规则集（Grok），并入 AI 分流与国际 DoH 解析白名单
+- 校验加强：
+  - 第 1 级移植内核 `ValidAndSplitDomain` 做域名通配语法回归
+    （v1.19.30 起 `+` 只能是多段域名首个完整段、`*` 只能是完整一段，
+    写错直接 `invalid domain`），覆盖 `fake-ip-filter` / `nameserver-policy`
+    键 / `hosts` 键 / `skip-domain`；另加 sniffer 端口互斥、
+    `expected-status`、`default-selected` 成员合法性、
+    `empty-fallback` 不得填策略组等断言
+  - 第 3 级新增运行时断言并按内核版本 gate：`expected-status` /
+    `empty-fallback` / `default-selected` 这三个字段旧内核会**静默忽略
+    且 `-t` 照样通过**，只有查 `/proxies` API 才能区分"写了"和"生效了"。
+    已在 v1.19.30 与 v1.19.25 上分别验证（后者自动跳过新字段断言）
+  - 探针配置关闭 `store-selected`，避免缓存里的历史选择盖掉 `default-selected`
 
 ### v2.4（2026-07）
 

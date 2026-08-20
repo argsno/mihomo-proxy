@@ -130,6 +130,65 @@ const assertCommon = (tag, result) => {
     ) === JSON.stringify(CN_DOH),
     `[${tag}] Steam 下载 CDN 的 DNS 指向国内 DoH`,
   );
+  // 直连出口专用解析器：避免"走直连但不在 policy 白名单"的域名绕到境外解析。
+  // follow-policy 必须为 true，否则 google/gfw/AI 族一旦被改判直连就会
+  // 退化成国内解析结果（拿到被污染的 IP）。
+  assert(
+    JSON.stringify(result.dns?.["direct-nameserver"]) ===
+      JSON.stringify(["system", ...CN_DOH]),
+    `[${tag}] direct-nameserver 为 system + 国内 DoH`,
+  );
+  assert(
+    result.dns?.["direct-nameserver-follow-policy"] === true,
+    `[${tag}] direct-nameserver 仍遵循 nameserver-policy`,
+  );
+  assert(
+    result.dns?.["prefer-h3"] === false,
+    `[${tag}] prefer-h3 关闭（官方明确不与 respect-rules 同开）`,
+  );
+
+  // 域名通配语法（内核 v1.19.30 起严格校验，写错直接 invalid domain）
+  const domainPatterns = [
+    ...(result.dns?.["fake-ip-filter"] ?? []),
+    ...Object.keys(result.dns?.["nameserver-policy"] ?? {}),
+    ...Object.keys(result.hosts ?? {}),
+    ...(result.sniffer?.["skip-domain"] ?? []),
+  ].filter((d) => !String(d).startsWith("rule-set:"));
+  const badDomains = domainPatterns.filter((d) => !isValidDomainPattern(d));
+  assert(
+    badDomains.length === 0,
+    `[${tag}] 域名通配语法合法（异常：${badDomains.join(",") || "无"}）`,
+  );
+
+  // sniffer：HTTP 与 TLS 同为 TCP，端口区间重叠会让接管者不确定，
+  // 而两者的 override-destination 取值相反 —— 必须互斥。
+  const httpPorts = expandPorts(result.sniffer?.sniff?.HTTP?.ports);
+  const tlsPorts = expandPorts(result.sniffer?.sniff?.TLS?.ports);
+  const overlap = [...tlsPorts].filter((p) => httpPorts.has(p));
+  assert(
+    overlap.length === 0,
+    `[${tag}] sniffer HTTP/TLS 端口不重叠（重叠：${overlap.join(",") || "无"}）`,
+  );
+
+  // 健康检查锁定 204：默认 `*` 会把门户劫持的 200 页面当成节点可用
+  const healthGroups = (result["proxy-groups"] ?? []).filter((g) =>
+    ["url-test", "fallback", "load-balance"].includes(g.type),
+  );
+  assert(
+    healthGroups.length > 0 &&
+      healthGroups.every((g) => g["expected-status"] === 204),
+    `[${tag}] 所有健康检查组 expected-status=204`,
+  );
+
+  // default-selected 若书写，必须是该组的既有成员（否则内核静默回落首位）
+  const badDefaults = (result["proxy-groups"] ?? [])
+    .filter((g) => g["default-selected"])
+    .filter((g) => !(g.proxies ?? []).includes(g["default-selected"]))
+    .map((g) => g.name);
+  assert(
+    badDefaults.length === 0,
+    `[${tag}] default-selected 均为组内成员（异常：${badDefaults.join(",") || "无"}）`,
+  );
 
   const rules = result.rules ?? [];
   const steamDirectIdx = rules.indexOf("DOMAIN-SUFFIX,steamcontent.com,DIRECT");
@@ -179,6 +238,46 @@ const skeleton = (rules = []) =>
 const toJsRegex = (src) => {
   const m = /^\(\?i\)([\s\S]*)$/.exec(String(src));
   return m ? new RegExp(m[1], "i") : new RegExp(String(src));
+};
+
+/**
+ * 域名通配语法校验，对齐内核 component/trie/domain.go 的
+ * ValidAndSplitDomain（v1.19.30 起收紧，不合法直接 ErrInvalidDomain）：
+ *   - 拒绝尾点、首尾空白、空段（"a..b" / "a." / ".."）
+ *   - `+` 只能是多段域名的第一个完整段（"+.example.com"），别处一律拒绝
+ *   - `*` 只能是完整的一段，"*a" / "a*b" 这类部分通配一律拒绝
+ * 适用于 fake-ip-filter、nameserver-policy 的键、hosts 的键、skip-domain。
+ */
+const isValidDomainPattern = (domain) => {
+  const s = String(domain);
+  if (s === "" || s.endsWith(".")) return false;
+  if (/^\s/.test(s) || /\s$/.test(s)) return false;
+  const parts = s.toLowerCase().split(".");
+  if (parts.length === 1) {
+    if (parts[0] === "") return false;
+  } else if (parts.slice(1).some((p) => p === "")) {
+    return false;
+  }
+  return parts.every((p, i) => {
+    if (p.includes("+") && (p !== "+" || i !== 0 || parts.length === 1)) {
+      return false;
+    }
+    return !p.includes("*") || p === "*";
+  });
+};
+
+/** 展开 sniffer 的端口写法（数字 / "起-止" 区间）为端口号集合 */
+const expandPorts = (ports = []) => {
+  const set = new Set();
+  for (const p of ports) {
+    const m = /^(\d+)-(\d+)$/.exec(String(p));
+    if (m) {
+      for (let i = Number(m[1]); i <= Number(m[2]); i++) set.add(i);
+    } else {
+      set.add(Number(p));
+    }
+  }
+  return set;
 };
 
 // ============ 完整版 ============
@@ -300,6 +399,25 @@ assertCommon("flclash", flclash);
       `[flclash] ${n} 组启用 include-all`,
     );
   }
+  // include-all 的测速组过滤后可能一个成员都不剩（CUSTOM_FILTER 写太宽）。
+  // 内核此时会把组成员置成 empty-fallback，默认 COMPATIBLE；显式写 DIRECT
+  // 让这个兜底在 App 里可见，且与「无节点来源」分支的回退一致。
+  for (const n of ["自动测速", "AI 自动测速"]) {
+    assert(
+      byName.get(n)?.["empty-fallback"] === "DIRECT",
+      `[flclash] ${n} 组空成员回退 DIRECT`,
+    );
+  }
+  // empty-fallback 只接受 proxy 名，填策略组会被内核直接判错
+  const groupNameSet = new Set(names);
+  const badEmptyFallback = groups
+    .filter((g) => g["empty-fallback"])
+    .filter((g) => groupNameSet.has(g["empty-fallback"]))
+    .map((g) => g.name);
+  assert(
+    badEmptyFallback.length === 0,
+    `[flclash] empty-fallback 未填策略组（异常：${badEmptyFallback.join(",") || "无"}）`,
+  );
   assert(
     JSON.stringify(byName.get("全部")?.proxies) ===
       JSON.stringify(["自动测速"]),

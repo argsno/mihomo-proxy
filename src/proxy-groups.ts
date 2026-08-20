@@ -56,7 +56,9 @@ export const buildProxyGroups = ({
       ...regionEntries,
       ...(hasOther ? ["Other"] : []),
     ];
-    add("main", "select", mainEntries, "Available.png");
+    add("main", "select", mainEntries, "Available.png", {
+      "default-selected": "All",
+    });
     add(
       "URL Test - All",
       "url-test",
@@ -64,7 +66,12 @@ export const buildProxyGroups = ({
       "Auto.png",
       SETTINGS.URL_TEST_EXTRA,
     );
-    add("All", "select", ["URL Test - All", ...allNames], "Auto.png");
+    // default-selected：把「默认选中自动测速组」写成显式语义。
+    // 此前依赖内核 selectedProxy() 找不到选中项时返回 proxies[0]，
+    // 一旦成员顺序调整默认项就会跟着漂。
+    add("All", "select", ["URL Test - All", ...allNames], "Auto.png", {
+      "default-selected": "URL Test - All",
+    });
   }
 
   // ---- 地区组（每地区一个 url-test + 一个 select） ----
@@ -83,6 +90,7 @@ export const buildProxyGroups = ({
       "select",
       [`URL Test - ${region.name}`, ...region.proxies],
       region.icon,
+      { "default-selected": `URL Test - ${region.name}` },
     );
   });
 
@@ -100,6 +108,7 @@ export const buildProxyGroups = ({
       "select",
       ["URL Test - Other", ...otherProxyNames],
       "Available.png",
+      { "default-selected": "URL Test - Other" },
     );
   }
   if (infoNames.length) add("info", "select", infoNames, "Available.png");
@@ -130,6 +139,7 @@ export const buildProxyGroups = ({
       "select",
       ["URL Test - AI", ...aiRegions, "main", ...(hasOther ? ["Other"] : [])],
       "ChatGPT.png",
+      { "default-selected": "URL Test - AI" },
     );
 
     // Google / YouTube（YouTube 可复用 Google 出口）
@@ -150,6 +160,7 @@ export const buildProxyGroups = ({
       "select",
       ["Telegram - Fallback", ...(hasSG ? ["SG"] : []), ...proxyFirst],
       "Telegram.png",
+      { "default-selected": "Telegram - Fallback" },
     );
 
     // Steam / Apple / Microsoft：默认走代理，可选 DIRECT

@@ -1,5 +1,5 @@
 /**
-* simple-mihomo — 极简业务分流版 v1.2
+* simple-mihomo — 极简业务分流版 v3.0
 * ------------------------------------------------------------------
 * mihomo-proxy.js 的极简姊妹版：保留全部业务分流与 DNS/TUN 优化，
 * 但策略组只有三个，节点不做地区分组，简洁好理解：
@@ -27,6 +27,13 @@ var __mihomoSimple = (function(exports) {
 	var CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3/i;
 	//#endregion
 	//#region src/settings.ts
+	/**
+	* 健康检查期望状态码。测速地址 generate_204 正常必回 204，
+	* 而内核默认 expected-status 为 `*`（任何响应都算通过），
+	* 酒店/校园网门户劫持返回 200 页面时节点会被误判为可用。
+	* 显式锁定 204 后，被劫持的链路会正确计入失败。
+	*/
+	var EXPECTED_STATUS = 204;
 	var SETTINGS = {
 		/** Koolson/Qure 彩色图标库 */
 		ICON_BASE: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/",
@@ -56,7 +63,8 @@ var __mihomoSimple = (function(exports) {
 			tolerance: 50,
 			lazy: true,
 			timeout: 5e3,
-			"max-failed-times": 3
+			"max-failed-times": 3,
+			"expected-status": EXPECTED_STATUS
 		},
 		/**
 		* 手机端（FlClash）url-test 参数：在桌面参数基础上放宽。
@@ -70,7 +78,8 @@ var __mihomoSimple = (function(exports) {
 			tolerance: 80,
 			lazy: true,
 			timeout: 5e3,
-			"max-failed-times": 3
+			"max-failed-times": 3,
+			"expected-status": EXPECTED_STATUS
 		},
 		/** fallback 组的通用参数 */
 		FALLBACK_TEST_EXTRA: {
@@ -78,7 +87,8 @@ var __mihomoSimple = (function(exports) {
 			interval: 300,
 			lazy: true,
 			timeout: 5e3,
-			"max-failed-times": 3
+			"max-failed-times": 3,
+			"expected-status": EXPECTED_STATUS
 		},
 		/** 机场信息类节点（到期/官网/流量等）识别过滤器 */
 		INFO_FILTER: /tg|telegram|倒卖|到期|电报|订阅|发布|防止|返利|购买|官方|官网|工单|过期|规则|建议|客服|联系|流量|剩余|失联|网址|邮箱|续费|邀请|重置|梯子|群/i
@@ -258,6 +268,10 @@ var __mihomoSimple = (function(exports) {
 			file: "notion"
 		},
 		{
+			key: "xai",
+			file: "xai"
+		},
+		{
 			key: "gfw",
 			file: "gfw"
 		},
@@ -346,6 +360,7 @@ var __mihomoSimple = (function(exports) {
 		`RULE-SET,perplexity,${t.ai}`,
 		`RULE-SET,cursor,${t.ai}`,
 		`RULE-SET,notion,${t.ai}`,
+		`RULE-SET,xai,${t.ai}`,
 		`RULE-SET,category-ai,${t.ai}`,
 		`RULE-SET,googlefcm,${t.google}`,
 		`RULE-SET,youtube,${t.youtube}`,
@@ -456,13 +471,15 @@ var __mihomoSimple = (function(exports) {
 			"default-nameserver": ["system", ...DNS_SERVERS.BOOTSTRAP],
 			nameserver: DNS_SERVERS.GLOBAL_DOH,
 			"proxy-server-nameserver": DNS_SERVERS.CN_DOH,
+			"direct-nameserver": ["system", ...DNS_SERVERS.CN_DOH],
+			"direct-nameserver-follow-policy": true,
 			"nameserver-policy": {
 				"rule-set:private": ["system", ...DNS_SERVERS.CN_DOH],
 				"+.qq.com": DNS_SERVERS.CN_DOH,
 				"+.tencent.com": DNS_SERVERS.CN_DOH,
 				"+.qcloud.com": DNS_SERVERS.CN_DOH,
 				"+.wegame.com.cn": DNS_SERVERS.CN_DOH,
-				"rule-set:google,googlefcm,youtube,gfw,telegram,spotify,category-ai,openai,anthropic,perplexity,cursor,notion": DNS_SERVERS.GLOBAL_DOH,
+				"rule-set:google,googlefcm,youtube,gfw,telegram,spotify,category-ai,openai,anthropic,perplexity,cursor,notion,xai": DNS_SERVERS.GLOBAL_DOH,
 				"rule-set:category-ntp": ["system", ...DNS_SERVERS.CN_DOH],
 				"+.msftconnecttest.com": ["system", ...DNS_SERVERS.CN_DOH],
 				"+.msftncsi.com": ["system", ...DNS_SERVERS.CN_DOH],
@@ -507,7 +524,11 @@ var __mihomoSimple = (function(exports) {
 			"override-destination": false,
 			sniff: {
 				HTTP: {
-					ports: [80, "8080-8880"],
+					ports: [
+						80,
+						"8080-8442",
+						"8444-8880"
+					],
 					"override-destination": false
 				},
 				TLS: {
@@ -589,6 +610,7 @@ var __mihomoSimple = (function(exports) {
 				name: GROUPS.ALL,
 				type: "select",
 				proxies: ["自动测速", ...allNames],
+				"default-selected": "自动测速",
 				icon: icon("Global.png")
 			});
 		} else groups.push({
@@ -609,6 +631,7 @@ var __mihomoSimple = (function(exports) {
 				name: GROUPS.AI,
 				type: "select",
 				proxies: ["AI 自动测速", ...aiNames],
+				"default-selected": "AI 自动测速",
 				icon: icon("ChatGPT.png")
 			});
 		} else groups.push({

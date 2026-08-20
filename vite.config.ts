@@ -23,7 +23,7 @@ const FULL = {
   name: "__mihomoProxy",
   fileName: "mihomo-proxy.js",
   banner: `/**
- * mihomo-proxy — Ultimate Stable Edition v2.3
+ * mihomo-proxy — Ultimate Stable Edition v3.0
  * ------------------------------------------------------------------
  * 面向 Sparkle / 最新 Mihomo(Clash.Meta) 内核的配置增强脚本。
  * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
@@ -40,7 +40,7 @@ const SIMPLE = {
   name: "__mihomoSimple",
   fileName: "simple-mihomo.js",
   banner: `/**
- * simple-mihomo — 极简业务分流版 v1.2
+ * simple-mihomo — 极简业务分流版 v3.0
  * ------------------------------------------------------------------
  * mihomo-proxy.js 的极简姊妹版：保留全部业务分流与 DNS/TUN 优化，
  * 但策略组只有三个，节点不做地区分组，简洁好理解：
@@ -64,7 +64,7 @@ const FLCLASH = {
   name: "__mihomoFlClash",
   fileName: "flclash-mobile.js",
   banner: `/**
- * flclash-mobile — FlClash（手机端）覆写脚本 v1.0
+ * flclash-mobile — FlClash（手机端）覆写脚本 v3.0
  * ------------------------------------------------------------------
  * 与 simple-mihomo 同样的三个策略组、同一套业务分流 / DNS 防泄露 /
  * Sniffer 源码，但节点改由内核 include-all + 正则过滤在运行时纳入：

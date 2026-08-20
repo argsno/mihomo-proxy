@@ -1,6 +1,6 @@
 {
   "name": "mihomo-proxy",
-  "version": "2.4.0",
+  "version": "3.0.0",
   "description": "Clash Verge Rev / Mihomo / FlClash 配置增强脚本（vite + ts 模块化构建，三产物）",
   "scripts": {
     "typecheck": "tsc --noEmit",

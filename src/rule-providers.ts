@@ -38,6 +38,9 @@ const GEOSITE_PROVIDERS: ProviderEntry[] = [
   { key: "perplexity", file: "perplexity" },
   { key: "cursor", file: "cursor" },
   { key: "notion", file: "notion" },
+  { key: "xai", file: "xai" }, // Grok
+  // 注：上游没有独立的 gemini 集合，Gemini/AI Studio/NotebookLM 的域名
+  // 由 category-ai-!cn 覆盖；因 AI 系列规则排在 google 之前，会先命中 AI 组。
   // ---- 兜底与基础设施 ----
   { key: "gfw", file: "gfw" },
   { key: "connectivity-check", file: "connectivity-check" },

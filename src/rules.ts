@@ -56,6 +56,7 @@ export const buildStaticRules = (t: RuleTargets): string[] => [
   `RULE-SET,perplexity,${t.ai}`,
   `RULE-SET,cursor,${t.ai}`,
   `RULE-SET,notion,${t.ai}`,
+  `RULE-SET,xai,${t.ai}`,
   `RULE-SET,category-ai,${t.ai}`,
 
   // Google 生态（顺序关键！rules 是有序数组，先匹配先停止）

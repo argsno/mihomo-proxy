@@ -111,6 +111,19 @@ const EXCLUDE_AI = buildExcludeFilter(
 const withExclude = (group: ProxyGroup, filter: string): ProxyGroup =>
   filter ? { ...group, "exclude-filter": filter } : group;
 
+/**
+ * include-all 组的空成员兜底（内核 v1.19.27+ 的 `empty-fallback`）。
+ *
+ * parser.go 里 include-all 的分支：过滤后一个成员都不剩时，组成员会被
+ * 置成 `[]string{EmptyFallback}`，默认值是 COMPATIBLE。COMPATIBLE 实为
+ * outbound.NewCompatible() 返回的 Direct（只是 Type 不同），行为等同直连，
+ * 但在 UI 上显示为一个语义不明的名字。显式写成 DIRECT 后：
+ *   - 用户把 CUSTOM_FILTER 写太宽导致组被清空时，App 里能一眼看出是直连
+ *   - 行为与「无节点来源」分支的 DIRECT 回退保持一致
+ * 注意：empty-fallback 只接受 proxy 名，填策略组会被内核直接判错。
+ */
+const EMPTY_FALLBACK = { "empty-fallback": "DIRECT" };
+
 // ============================================================
 // ProxyGroups —— 三个策略组（节点由内核 include-all 运行时纳入）
 // ============================================================
@@ -147,8 +160,9 @@ const buildMobileProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
 
   // 无节点来源（空订阅 / 拉取失败）：业务组回退 DIRECT，
   // 保证配置可用且仍能上网（对齐 simple-mihomo 的既有行为）。
-  // 此处不能依赖内核对空组的 COMPATIBLE 回退——那会让命中规则的流量
-  // 直接失败，而不是放行直连。
+  // 内核侧的 empty-fallback 如今也能得到等价结果，但这里仍在脚本侧显式
+  // 回退：一是产物在 v1.19.27 之前的旧内核上照样正确，二是 App 的策略组
+  // 列表里直接看得到 DIRECT，不用去猜空组会落到哪。
   if (!hasNodes) {
     return [
       {
@@ -182,6 +196,7 @@ const buildMobileProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
         "include-all": true,
         icon: icon("Auto.png"),
         ...SETTINGS.MOBILE_URL_TEST_EXTRA,
+        ...EMPTY_FALLBACK,
       },
       EXCLUDE_COMMON,
     ),
@@ -191,6 +206,10 @@ const buildMobileProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
         type: "select",
         proxies: [AUTO.ALL],
         "include-all": true,
+        // 默认选中自动测速。此前靠「排在 proxies[0]」隐式生效
+        // （内核 selectedProxy 找不到选中项时返回第一个成员），
+        // 写成 default-selected 后语义明确，也不受成员顺序变化影响。
+        "default-selected": AUTO.ALL,
         icon: icon("Global.png"),
       },
       EXCLUDE_COMMON,
@@ -204,6 +223,7 @@ const buildMobileProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
         "include-all": true,
         icon: icon("ChatGPT.png"),
         ...SETTINGS.MOBILE_URL_TEST_EXTRA,
+        ...EMPTY_FALLBACK,
       },
       EXCLUDE_AI,
     ),
@@ -213,6 +233,7 @@ const buildMobileProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
         type: "select",
         proxies: [AUTO.AI],
         "include-all": true,
+        "default-selected": AUTO.AI,
         icon: icon("ChatGPT.png"),
       },
       EXCLUDE_AI,

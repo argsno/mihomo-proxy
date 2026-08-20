@@ -89,6 +89,8 @@ const buildSimpleProxyGroups = ({
   const groups: ProxyGroup[] = [];
 
   // 全部：自动测速打头（默认选它即自动选优），后跟所有节点可手动切换。
+  // default-selected 把「默认选中自动测速」写成显式语义，不再依赖
+  // 内核 selectedProxy() 找不到选中项时返回 proxies[0] 的隐式行为。
   // 无节点时回退 DIRECT，保证规则引用的组始终存在（配置不报错）。
   if (allNames.length) {
     groups.push({
@@ -102,6 +104,7 @@ const buildSimpleProxyGroups = ({
       name: GROUPS.ALL,
       type: "select",
       proxies: ["自动测速", ...allNames],
+      "default-selected": "自动测速",
       icon: icon("Global.png"),
     });
   } else {
@@ -126,6 +129,7 @@ const buildSimpleProxyGroups = ({
       name: GROUPS.AI,
       type: "select",
       proxies: ["AI 自动测速", ...aiNames],
+      "default-selected": "AI 自动测速",
       icon: icon("ChatGPT.png"),
     });
   } else {

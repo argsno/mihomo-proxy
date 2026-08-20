@@ -85,6 +85,17 @@ export const applyDns = (cfg: ClashConfig): void => {
     // 又因 DoH 加密不受 GFW 污染（alidns/doh.pub 不会篡改机场自有域名）。
     "proxy-server-nameserver": DNS_SERVERS.CN_DOH,
 
+    // 命中 DIRECT 出口的连接专用解析器（内核 resolver.DirectHostResolver）。
+    // 补的是这样一个洞：默认 nameserver 是国际 DoH，凡是【走直连但又不在
+    // 下方 policy 白名单里】的域名——用户 BYPASS_DOMAINS、
+    // DOMAIN-KEYWORD,wegame、connectivity-check 集合等——解析都会绕到境外
+    // 再经代理回来，慢且拿到的是境外 CDN 边缘节点。
+    // follow-policy=true 是关键：保留 policy 的最高优先级，
+    // google/gfw/AI 这些即使因用户规则被改判直连，依然用国际 DoH 解析，
+    // 不会因为改直连就退化成被污染的国内解析结果。
+    "direct-nameserver": ["system", ...DNS_SERVERS.CN_DOH],
+    "direct-nameserver-follow-policy": true,
+
     // Smart 分流核心：按规则集精确指派上游 DNS
     // 语法注意：多规则集合并到一个 key 时，`rule-set:` 前缀只写一次，
     // 后接逗号分隔的名称（mihomo config.go parseNameServerPolicy 按
@@ -105,7 +116,7 @@ export const applyDns = (cfg: ClashConfig): void => {
       "+.qcloud.com": DNS_SERVERS.CN_DOH,
       "+.wegame.com.cn": DNS_SERVERS.CN_DOH,
       // 需翻墙域名族（Google/YouTube/AI/GFW/Telegram/Spotify）→ 国际 DoH
-      "rule-set:google,googlefcm,youtube,gfw,telegram,spotify,category-ai,openai,anthropic,perplexity,cursor,notion":
+      "rule-set:google,googlefcm,youtube,gfw,telegram,spotify,category-ai,openai,anthropic,perplexity,cursor,notion,xai":
         DNS_SERVERS.GLOBAL_DOH,
       // 豁免 fake-ip 的 NTP/联网探测域名需要真实解析，必须显式指到
       // 直连可达的上游：若落到默认 nameserver（国际 DoH，respect-rules

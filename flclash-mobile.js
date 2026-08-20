@@ -1,5 +1,5 @@
 /**
-* flclash-mobile — FlClash（手机端）覆写脚本 v1.0
+* flclash-mobile — FlClash（手机端）覆写脚本 v3.0
 * ------------------------------------------------------------------
 * 与 simple-mihomo 同样的三个策略组、同一套业务分流 / DNS 防泄露 /
 * Sniffer 源码，但节点改由内核 include-all + 正则过滤在运行时纳入：
@@ -42,6 +42,13 @@ var __mihomoFlClash = (function(exports) {
 	var CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3/i;
 	//#endregion
 	//#region src/settings.ts
+	/**
+	* 健康检查期望状态码。测速地址 generate_204 正常必回 204，
+	* 而内核默认 expected-status 为 `*`（任何响应都算通过），
+	* 酒店/校园网门户劫持返回 200 页面时节点会被误判为可用。
+	* 显式锁定 204 后，被劫持的链路会正确计入失败。
+	*/
+	var EXPECTED_STATUS = 204;
 	var SETTINGS = {
 		/** Koolson/Qure 彩色图标库 */
 		ICON_BASE: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/",
@@ -71,7 +78,8 @@ var __mihomoFlClash = (function(exports) {
 			tolerance: 50,
 			lazy: true,
 			timeout: 5e3,
-			"max-failed-times": 3
+			"max-failed-times": 3,
+			"expected-status": EXPECTED_STATUS
 		},
 		/**
 		* 手机端（FlClash）url-test 参数：在桌面参数基础上放宽。
@@ -85,7 +93,8 @@ var __mihomoFlClash = (function(exports) {
 			tolerance: 80,
 			lazy: true,
 			timeout: 5e3,
-			"max-failed-times": 3
+			"max-failed-times": 3,
+			"expected-status": EXPECTED_STATUS
 		},
 		/** fallback 组的通用参数 */
 		FALLBACK_TEST_EXTRA: {
@@ -93,7 +102,8 @@ var __mihomoFlClash = (function(exports) {
 			interval: 300,
 			lazy: true,
 			timeout: 5e3,
-			"max-failed-times": 3
+			"max-failed-times": 3,
+			"expected-status": EXPECTED_STATUS
 		},
 		/** 机场信息类节点（到期/官网/流量等）识别过滤器 */
 		INFO_FILTER: /tg|telegram|倒卖|到期|电报|订阅|发布|防止|返利|购买|官方|官网|工单|过期|规则|建议|客服|联系|流量|剩余|失联|网址|邮箱|续费|邀请|重置|梯子|群/i
@@ -204,6 +214,10 @@ var __mihomoFlClash = (function(exports) {
 			file: "notion"
 		},
 		{
+			key: "xai",
+			file: "xai"
+		},
+		{
 			key: "gfw",
 			file: "gfw"
 		},
@@ -296,6 +310,7 @@ var __mihomoFlClash = (function(exports) {
 		`RULE-SET,perplexity,${t.ai}`,
 		`RULE-SET,cursor,${t.ai}`,
 		`RULE-SET,notion,${t.ai}`,
+		`RULE-SET,xai,${t.ai}`,
 		`RULE-SET,category-ai,${t.ai}`,
 		`RULE-SET,googlefcm,${t.google}`,
 		`RULE-SET,youtube,${t.youtube}`,
@@ -384,13 +399,15 @@ var __mihomoFlClash = (function(exports) {
 			"default-nameserver": ["system", ...DNS_SERVERS.BOOTSTRAP],
 			nameserver: DNS_SERVERS.GLOBAL_DOH,
 			"proxy-server-nameserver": DNS_SERVERS.CN_DOH,
+			"direct-nameserver": ["system", ...DNS_SERVERS.CN_DOH],
+			"direct-nameserver-follow-policy": true,
 			"nameserver-policy": {
 				"rule-set:private": ["system", ...DNS_SERVERS.CN_DOH],
 				"+.qq.com": DNS_SERVERS.CN_DOH,
 				"+.tencent.com": DNS_SERVERS.CN_DOH,
 				"+.qcloud.com": DNS_SERVERS.CN_DOH,
 				"+.wegame.com.cn": DNS_SERVERS.CN_DOH,
-				"rule-set:google,googlefcm,youtube,gfw,telegram,spotify,category-ai,openai,anthropic,perplexity,cursor,notion": DNS_SERVERS.GLOBAL_DOH,
+				"rule-set:google,googlefcm,youtube,gfw,telegram,spotify,category-ai,openai,anthropic,perplexity,cursor,notion,xai": DNS_SERVERS.GLOBAL_DOH,
 				"rule-set:category-ntp": ["system", ...DNS_SERVERS.CN_DOH],
 				"+.msftconnecttest.com": ["system", ...DNS_SERVERS.CN_DOH],
 				"+.msftncsi.com": ["system", ...DNS_SERVERS.CN_DOH],
@@ -435,7 +452,11 @@ var __mihomoFlClash = (function(exports) {
 			"override-destination": false,
 			sniff: {
 				HTTP: {
-					ports: [80, "8080-8880"],
+					ports: [
+						80,
+						"8080-8442",
+						"8444-8880"
+					],
 					"override-destination": false
 				},
 				TLS: {
@@ -548,6 +569,18 @@ var __mihomoFlClash = (function(exports) {
 		"exclude-filter": filter
 	} : group;
 	/**
+	* include-all 组的空成员兜底（内核 v1.19.27+ 的 `empty-fallback`）。
+	*
+	* parser.go 里 include-all 的分支：过滤后一个成员都不剩时，组成员会被
+	* 置成 `[]string{EmptyFallback}`，默认值是 COMPATIBLE。COMPATIBLE 实为
+	* outbound.NewCompatible() 返回的 Direct（只是 Type 不同），行为等同直连，
+	* 但在 UI 上显示为一个语义不明的名字。显式写成 DIRECT 后：
+	*   - 用户把 CUSTOM_FILTER 写太宽导致组被清空时，App 里能一眼看出是直连
+	*   - 行为与「无节点来源」分支的 DIRECT 回退保持一致
+	* 注意：empty-fallback 只接受 proxy 名，填策略组会被内核直接判错。
+	*/
+	var EMPTY_FALLBACK = { "empty-fallback": "DIRECT" };
+	/**
 	* 订阅是否提供了节点来源。
 	* proxies 与 proxy-providers 任一非空即可 —— provider 为 http 类型时
 	* 配置校验阶段尚未下载，节点数为 0 属正常，不能据此判空。
@@ -603,13 +636,15 @@ var __mihomoFlClash = (function(exports) {
 				proxies: [],
 				"include-all": true,
 				icon: icon("Auto.png"),
-				...SETTINGS.MOBILE_URL_TEST_EXTRA
+				...SETTINGS.MOBILE_URL_TEST_EXTRA,
+				...EMPTY_FALLBACK
 			}, EXCLUDE_COMMON),
 			withExclude({
 				name: GROUPS.ALL,
 				type: "select",
 				proxies: [AUTO.ALL],
 				"include-all": true,
+				"default-selected": AUTO.ALL,
 				icon: icon("Global.png")
 			}, EXCLUDE_COMMON),
 			withExclude({
@@ -618,13 +653,15 @@ var __mihomoFlClash = (function(exports) {
 				proxies: [],
 				"include-all": true,
 				icon: icon("ChatGPT.png"),
-				...SETTINGS.MOBILE_URL_TEST_EXTRA
+				...SETTINGS.MOBILE_URL_TEST_EXTRA,
+				...EMPTY_FALLBACK
 			}, EXCLUDE_AI),
 			withExclude({
 				name: GROUPS.AI,
 				type: "select",
 				proxies: [AUTO.AI],
 				"include-all": true,
+				"default-selected": AUTO.AI,
 				icon: icon("ChatGPT.png")
 			}, EXCLUDE_AI),
 			{
