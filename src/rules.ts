@@ -1,9 +1,40 @@
 import { uniq } from "./utils";
-import { BYPASS_DOMAINS, FORCE_PROXY_DOMAINS } from "./user-config";
+import {
+  BLOCK_GOOGLE_QUIC,
+  BYPASS_DOMAINS,
+  FORCE_PROXY_DOMAINS,
+} from "./user-config";
 
 // ============================================================
 // 5. RuleBuilder —— 分流规则（顺序敏感：越具体越靠前）
 // ============================================================
+
+/**
+ * Google 系 QUIC 阻断规则（UDP 443 → REJECT，迫使客户端回落 TCP）。
+ * 必须排在所有 Google/AI/YouTube 规则之前才会命中（rules 先匹配先停止）。
+ * 用 OR + DOMAIN-SUFFIX 显式列举而非 `RULE-SET,google`：逻辑规则内嵌
+ * RULE-SET 在部分内核版本上行为不一致，显式后缀无歧义且覆盖了实际跑
+ * QUIC 的全部域名族。REJECT 而非 REJECT-DROP —— 静默丢弃会让客户端继续
+ * 等超时，正好是我们要消除的那几秒卡顿。
+ */
+const GOOGLE_QUIC_DOMAINS = [
+  "googleapis.com",
+  "gstatic.com",
+  "google.com",
+  "googlevideo.com",
+  "youtube.com",
+  "ytimg.com",
+  "ggpht.com",
+];
+
+const googleQuicRule = (): string[] =>
+  BLOCK_GOOGLE_QUIC
+    ? [
+        `AND,((NETWORK,udp),(DST-PORT,443),(OR,(${GOOGLE_QUIC_DOMAINS.map(
+          (d) => `(DOMAIN-SUFFIX,${d})`,
+        ).join(",")}))),REJECT`,
+      ]
+    : [];
 
 /**
  * 分流出口目标。完整版与极简版共用同一套规则骨架，
@@ -50,6 +81,10 @@ export const buildStaticRules = (t: RuleTargets): string[] => [
   "RULE-SET,private,DIRECT",
   "RULE-SET,private-ip,DIRECT,no-resolve",
 
+  // Google 系 QUIC 阻断（见文件顶部 googleQuicRule 注释）。位置必须在
+  // AI / Google / YouTube 之前，否则那些规则会先把 UDP 443 送进代理组。
+  ...googleQuicRule(),
+
   // AI（独立于 gfw，优先匹配以免被 google/gfw 抢占）
   `RULE-SET,openai,${t.ai}`,
   `RULE-SET,anthropic,${t.ai}`,
@@ -66,6 +101,18 @@ export const buildStaticRules = (t: RuleTargets): string[] => [
   // "未联网"、Chrome 商店卡死、NotebookLM 白屏。
   // 实际效果：google 先匹配并消耗了所有全球域名，google-cn 仅能命中
   // 不在 google 集合中的纯国区域名（google.cn / 265.com / pki.goog 等）。
+  //
+  // 出口收敛：googleapis.com / gstatic.com 这两个共享域下的子域散落在
+  // youtube（youtubei.googleapis.com）与 google 两个集合里，完整版会因此
+  // 被分派到 YouTube / Google 两个可独立切换的策略组。后果不是某个域名
+  // 不通，而是同一 Google 账号的请求从多个出口 IP 发出——OAuth 刷新、
+  // Chrome sync、Drive 上传在 IP 间跳变，触发 Google 侧风控（插入验证、
+  // 401、静默降速），表现即"时好时坏"。故在 youtube 之前把这两个共享域
+  // 整体钉到 t.google，保证单一出口。
+  // 注：AI 族规则排在更前面，generativelanguage.googleapis.com 等仍归
+  // AI 组——那是刻意的地区分离设计（AI 组避开香港），不在此收敛范围内。
+  `DOMAIN-SUFFIX,googleapis.com,${t.google}`,
+  `DOMAIN-SUFFIX,gstatic.com,${t.google}`,
   `RULE-SET,googlefcm,${t.google}`, // FCM 走代理（关键修正）
   `RULE-SET,youtube,${t.youtube}`,
   `RULE-SET,google,${t.google}`,

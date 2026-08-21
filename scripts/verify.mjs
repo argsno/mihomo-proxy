@@ -26,7 +26,7 @@ const CN_DOH = [
   "https://dns.alidns.com/dns-query",
   "https://doh.pub/dns-query",
 ];
-const GLOBAL_DOH = ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"];
+const GLOBAL_DOH = ["https://1.1.1.1/dns-query", "https://9.9.9.9/dns-query"];
 
 /** 内核合法的样例节点（-t 校验要求 ss 节点字段完整） */
 const sampleProxy = (name) => ({
@@ -78,6 +78,9 @@ const runScript = (file, cfg, argc = 2) => {
   ).runInContext(sandbox);
 };
 
+/** 逻辑规则（AND/OR/NOT）的出口在末位，且参数里含逗号，不能按位取 */
+const LOGIC_RULE_TYPES = new Set(["AND", "OR", "NOT"]);
+
 /** 每条规则的出口必须是存在的策略组 / DIRECT / REJECT / 节点名（零节点配置也必须满足） */
 const assertRuleTargets = (tag, result) => {
   const groupNames = new Set((result["proxy-groups"] ?? []).map((g) => g.name));
@@ -93,7 +96,9 @@ const assertRuleTargets = (tag, result) => {
   const badTargets = (result.rules ?? [])
     .map((r) => {
       const parts = String(r).split(",");
-      return parts[0] === "MATCH" ? parts[1] : parts[2];
+      if (parts[0] === "MATCH") return parts[1];
+      if (LOGIC_RULE_TYPES.has(parts[0])) return parts[parts.length - 1];
+      return parts[2];
     })
     .filter((t) => t && !validTargets.has(t));
   assert(
@@ -228,6 +233,8 @@ const skeleton = (rules = []) =>
   rules.map((r) => {
     const parts = String(r).split(",");
     if (parts[0] === "MATCH") return "MATCH";
+    // 逻辑规则的匹配条件本身含逗号，剥掉末位出口后整体作为骨架
+    if (LOGIC_RULE_TYPES.has(parts[0])) return parts.slice(0, -1).join(",");
     return `${parts[0]},${parts[1]}`;
   });
 

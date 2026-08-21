@@ -142,9 +142,15 @@ export const buildProxyGroups = ({
       { "default-selected": "URL Test - AI" },
     );
 
-    // Google / YouTube（YouTube 可复用 Google 出口）
+    // Google / YouTube（YouTube 默认复用 Google 出口）
+    // default-selected 显式锁定到 "Google"：YouTube 与 Google 大量共享
+    // 域名与账号态（youtubei.googleapis.com、登录/推荐/历史同步），两组
+    // 落到不同出口 IP 会触发 Google 侧的会话风控。想单独给 YouTube 换线
+    // 路时仍可在 App 内手动切换，只是默认不再分裂。
     add("Google", "select", proxyFirst, "Google_Search.png");
-    add("YouTube", "select", ["Google", ...proxyFirst], "YouTube.png");
+    add("YouTube", "select", ["Google", ...proxyFirst], "YouTube.png", {
+      "default-selected": "Google",
+    });
 
     // Telegram（新加坡优先，附 fallback 自愈）
     const hasSG = activeRegionNameSet.has("SG");

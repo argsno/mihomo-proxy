@@ -71,6 +71,12 @@ pnpm verify:runtime           # 启动内核查 /proxies API，验 include-all/e
 - **`empty-fallback: DIRECT`**（内核 v1.19.27+，仅手机版的 include-all 测速组）：`include-all` 过滤后一个成员都不剩时（`CUSTOM_FILTER` 写太宽），内核会把组成员置成 `empty-fallback`，默认 `COMPATIBLE`。注意 **COMPATIBLE 实为 `outbound.NewCompatible()` 返回的 `Direct`，行为等同直连而非失败**——显式写 DIRECT 只是让这个兜底在 App 里可见并与零节点分支一致。该字段只接受 proxy 名，填策略组会被内核直接判错。
 - 这三个字段旧内核都会**静默忽略且 `-t` 照样通过**，只有查 `/proxies` API 才能区分"写了"和"生效了"，故断言放在第 3 级 `verify-runtime.mjs` 并按内核版本 gate。
 
+### Google 系稳定性（`src/rules.ts`、`src/settings.ts`、`src/user-config.ts`）
+- **共享域出口收敛**：`googleapis.com` / `gstatic.com` 的子域同时散落在 geosite 的 `youtube` 与 `google` 集合里，完整版会把它们分派到两个可独立切换的策略组。后果不是某域名不通，而是同一 Google 账号的请求从多个出口 IP 发出，触发 Google 侧会话风控（插入验证 / 401 / 静默降速）。现用 `DOMAIN-SUFFIX` 在 `youtube` 规则前把这两个共享域钉到 `t.google`；`YouTube` 组也加了 `default-selected: "Google"`。AI 族规则排在更前，`generativelanguage.googleapis.com` 仍归 AI 组——那是刻意的避港设计，不在收敛范围。
+- **QUIC 阻断**（`BLOCK_GOOGLE_QUIC`，默认 true）：Google 系几乎全量 HTTP/3，节点不转发 UDP 时 QUIC 进黑洞，浏览器要等自己超时才回落 TCP，表现为「时不时卡几秒」而非明确报错。用 `AND,((NETWORK,udp),(DST-PORT,443),(OR,(...)))` 逻辑规则 REJECT（不是 REJECT-DROP——静默丢弃反而让客户端继续等）。逻辑规则内**不嵌 RULE-SET**，用显式 `DOMAIN-SUFFIX` 列举。该规则必须排在 AI/Google/YouTube 之前。
+- **`GLOBAL_DOH` 不含 8.8.8.8**：`respect-rules: true` 下 DoH 连接自身要过规则，8.8.8.8 会命中 `RULE-SET,google-ip,<Google 组>,no-resolve`，把 DNS 上游绑死在 Google 出口——Google 组一抖，Google 域名的解析跟着抖，单点故障放大成双重超时。改用 Quad9（9.9.9.9）解耦。
+- **桌面 `URL_TEST_EXTRA` 放宽到 600s / 100ms**：原 300/50 在跨境抖动下几乎每轮重选节点，长会话（Drive 上传、Gmail 长轮询、AI 流式响应）被反复打断，且出口 IP 变化又回头喂风控。
+
 ### Sniffer 端口区间（`src/runtime.ts`）
 HTTP 与 TLS 同为 TCP，端口区间**必须互斥**：原先 HTTP 的 `8080-8880` 覆盖了 TLS 的 `8443`，而两者 `override-destination` 取值相反，重叠即行为不确定（内核 v1.19.30 的 `coordinate TCP sniffers on overlapping ports` 才把这类冲突理顺）。现拆成 `8080-8442` + `8444-8880`。QUIC 走 UDP，与 TLS 同端口无妨。HTTP sniffer 自 v1.19.30 起顺带覆盖 H2C，QUIC 覆盖 QUICv2，均无需改配置。
 
