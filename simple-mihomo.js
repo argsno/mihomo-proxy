@@ -55,12 +55,19 @@ var __mihomoSimple = (function(exports) {
 			"AU",
 			"AS"
 		],
-		/** url-test 自动测速组的通用参数 */
+		/**
+		* url-test 自动测速组的通用参数。
+		* interval/tolerance 对长会话敏感：Google 系（Drive 分片上传、Gmail 长轮询、
+		* FCM）与 AI 流式响应都是长连接，一次切换就是一次断流；更糟的是出口 IP
+		* 跟着变，Google/OpenAI 侧的会话风控会插入验证或直接 401。
+		* 原 300s/50ms 在跨境线路的正常抖动下几乎每轮都会重选，故放宽到
+		* 600s/100ms（与手机版 600/80 同一量级）。
+		*/
 		URL_TEST_EXTRA: {
 			hidden: true,
 			url: "https://www.gstatic.com/generate_204",
-			interval: 300,
-			tolerance: 50,
+			interval: 600,
+			tolerance: 100,
 			lazy: true,
 			timeout: 5e3,
 			"max-failed-times": 3,
@@ -104,8 +111,16 @@ var __mihomoSimple = (function(exports) {
 		],
 		/** 国内加密 DoH（AliDNS + DNSPod） */
 		CN_DOH: ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"],
-		/** 国际加密 DoH（Cloudflare + Google，IP 形式免 bootstrap） */
-		GLOBAL_DOH: ["https://1.1.1.1/dns-query", "https://8.8.8.8/dns-query"]
+		/**
+		* 国际加密 DoH（IP 形式免 bootstrap）。
+		* 刻意不含 8.8.8.8：respect-rules=true 下 DoH 连接自身要过分流规则，
+		* 而 8.8.8.8 命中 `RULE-SET,google-ip,<Google 组>,no-resolve` —— DNS 上游
+		* 就被绑死在 Google 出口上，Google 组节点一抖，Google 域名的解析也跟着
+		* 抖，单点故障被放大成"解析超时 + 连接超时"双重等待。
+		* 换成 Quad9（9.9.9.9，非 Google ASN，走 MATCH 到主代理组）解开耦合，
+		* 同时保留 1.1.1.1 作首选，两家分属不同运营方避免同源故障。
+		*/
+		GLOBAL_DOH: ["https://1.1.1.1/dns-query", "https://9.9.9.9/dns-query"]
 	};
 	/** Fake-IP 地址池 */
 	var FAKE_IP_RANGE = "198.18.0.1/16";
@@ -338,6 +353,24 @@ var __mihomoSimple = (function(exports) {
 	//#endregion
 	//#region src/rules.ts
 	/**
+	* Google 系 QUIC 阻断规则（UDP 443 → REJECT，迫使客户端回落 TCP）。
+	* 必须排在所有 Google/AI/YouTube 规则之前才会命中（rules 先匹配先停止）。
+	* 用 OR + DOMAIN-SUFFIX 显式列举而非 `RULE-SET,google`：逻辑规则内嵌
+	* RULE-SET 在部分内核版本上行为不一致，显式后缀无歧义且覆盖了实际跑
+	* QUIC 的全部域名族。REJECT 而非 REJECT-DROP —— 静默丢弃会让客户端继续
+	* 等超时，正好是我们要消除的那几秒卡顿。
+	*/
+	var GOOGLE_QUIC_DOMAINS = [
+		"googleapis.com",
+		"gstatic.com",
+		"google.com",
+		"googlevideo.com",
+		"youtube.com",
+		"ytimg.com",
+		"ggpht.com"
+	];
+	var googleQuicRule = () => [`AND,((NETWORK,udp),(DST-PORT,443),(OR,(${GOOGLE_QUIC_DOMAINS.map((d) => `(DOMAIN-SUFFIX,${d})`).join(",")}))),REJECT`];
+	/**
 	* 构建静态规则。分流目标由 targets 注入。
 	* 设计要点：
 	*  - Google FCM 走代理，不再 DIRECT（Plan 4）。
@@ -355,6 +388,7 @@ var __mihomoSimple = (function(exports) {
 		"RULE-SET,cloudflare,DIRECT",
 		"RULE-SET,private,DIRECT",
 		"RULE-SET,private-ip,DIRECT,no-resolve",
+		...googleQuicRule(),
 		`RULE-SET,openai,${t.ai}`,
 		`RULE-SET,anthropic,${t.ai}`,
 		`RULE-SET,perplexity,${t.ai}`,
@@ -362,6 +396,8 @@ var __mihomoSimple = (function(exports) {
 		`RULE-SET,notion,${t.ai}`,
 		`RULE-SET,xai,${t.ai}`,
 		`RULE-SET,category-ai,${t.ai}`,
+		`DOMAIN-SUFFIX,googleapis.com,${t.google}`,
+		`DOMAIN-SUFFIX,gstatic.com,${t.google}`,
 		`RULE-SET,googlefcm,${t.google}`,
 		`RULE-SET,youtube,${t.youtube}`,
 		`RULE-SET,google,${t.google}`,
