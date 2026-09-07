@@ -528,6 +528,193 @@ assertCommon("flclash", flclash);
   assertRuleTargets("flclash-empty", emptyFlclash);
 }
 
+// ============ Bettbox / FlClash 系列专属版 ============
+// 按 FlClash/Bettbox 的调用约定执行：单参数 main(config)，且 config 带
+// proxy-providers（App 在调用前补成 {}）。
+const bettbox = runScript("bettbox-flclash.js", flclashConfig(), 1);
+assertCommon("bettbox", bettbox);
+{
+  const groups = bettbox["proxy-groups"] ?? [];
+  const names = groups.map((g) => g.name);
+  const byName = new Map(groups.map((g) => [g.name, g]));
+
+  // 必备策略组
+  for (const g of [
+    "main",
+    "All",
+    "AI",
+    "Google",
+    "YouTube",
+    "Telegram",
+    "Steam",
+    "Apple",
+    "Microsoft",
+    "GLOBAL",
+    "广告拦截",
+  ]) {
+    assert(names.includes(g), `[bettbox] 策略组存在：${g}`);
+  }
+
+  // 地区分组
+  for (const r of ["HK", "JP", "US", "SG"]) {
+    assert(names.includes(r), `[bettbox] 地区组存在：${r}`);
+    assert(
+      names.includes(`URL Test - ${r}`),
+      `[bettbox] 地区测速组存在：URL Test - ${r}`,
+    );
+  }
+  assert(names.includes("Other"), "[bettbox] Other 组存在");
+
+  // include-all 验证
+  for (const n of ["URL Test - All", "All", "URL Test - AI"]) {
+    assert(
+      byName.get(n)?.["include-all"] === true,
+      `[bettbox] ${n} 组启用 include-all`,
+    );
+  }
+
+  // empty-fallback 验证
+  for (const n of ["URL Test - All", "URL Test - AI"]) {
+    assert(
+      byName.get(n)?.["empty-fallback"] === "DIRECT",
+      `[bettbox] ${n} 组空成员回退 DIRECT`,
+    );
+  }
+  // empty-fallback 不能填策略组名
+  const bettboxGroupNameSet = new Set(names);
+  const bettboxBadEF = groups
+    .filter((g) => g["empty-fallback"])
+    .filter((g) => bettboxGroupNameSet.has(g["empty-fallback"]))
+    .map((g) => g.name);
+  assert(
+    bettboxBadEF.length === 0,
+    `[bettbox] empty-fallback 未填策略组（异常：${bettboxBadEF.join(",") || "无"}）`,
+  );
+
+  // main 组引用 All 和地区组
+  const mainGroup = byName.get("main");
+  assert(
+    mainGroup && mainGroup.proxies.includes("All"),
+    "[bettbox] main 组包含 All",
+  );
+  assert(
+    mainGroup && mainGroup["default-selected"] === "All",
+    "[bettbox] main 组默认选中 All",
+  );
+
+  // AI 组排除 HK
+  const aiGroup = byName.get("AI");
+  assert(
+    aiGroup && !aiGroup.proxies.includes("HK"),
+    "[bettbox] AI 组排除 HK",
+  );
+
+  // exclude-filter 行为验证
+  const allExclude = byName.get("All")?.["exclude-filter"];
+  assert(
+    typeof allExclude === "string" && allExclude.startsWith("(?i)(?:"),
+    `[bettbox] exclude-filter 格式正确：${allExclude}`,
+  );
+  const bettboxAllRe = toJsRegex(allExclude);
+  assert(
+    bettboxAllRe.test("剩余流量：100GB"),
+    "[bettbox] exclude-filter 命中信息节点",
+  );
+  assert(
+    !bettboxAllRe.test("🇯🇵 日本 02 0.5x"),
+    "[bettbox] exclude-filter 放行正常节点",
+  );
+  assert(
+    !bettboxAllRe.test(""),
+    "[bettbox] exclude-filter 不匹配空串",
+  );
+
+  // 地区测速组应有 filter
+  const hkUrlTest = byName.get("URL Test - HK");
+  assert(
+    hkUrlTest?.filter && /香港|HK/i.test(hkUrlTest.filter),
+    "[bettbox] HK 测速组有地区 filter",
+  );
+  assert(
+    hkUrlTest?.["exclude-filter"],
+    "[bettbox] HK 测速组有 exclude-filter（排除信息节点）",
+  );
+
+  // 规则出口验证
+  assert(
+    bettbox.rules.some((r) => /^RULE-SET,google,Google/.test(r)),
+    "[bettbox] google 出口为 Google 组",
+  );
+  assert(
+    bettbox.rules.some((r) => /^RULE-SET,youtube,YouTube/.test(r)),
+    "[bettbox] youtube 出口为 YouTube 组",
+  );
+  assert(
+    bettbox.rules[0] === "RULE-SET,category-ads-all,广告拦截",
+    "[bettbox] 广告规则出口为广告拦截组",
+  );
+  assert(
+    bettbox.rules[bettbox.rules.length - 1] === "MATCH,main",
+    "[bettbox] MATCH 出口为 main",
+  );
+
+  // 规则骨架与其他版本一致
+  assert(
+    JSON.stringify(skeleton(bettbox.rules)) ===
+      JSON.stringify(skeleton(full.rules)),
+    "[bettbox-一致] 规则骨架与完整版相同",
+  );
+
+  // 广告拦截组选项
+  const bbAdblock = byName.get("广告拦截");
+  assert(
+    bbAdblock &&
+      JSON.stringify(bbAdblock.proxies) ===
+        JSON.stringify(["REJECT", "DIRECT", "main"]),
+    "[bettbox] 广告拦截组选项为 REJECT/DIRECT/main",
+  );
+
+  // proxy-providers 型订阅
+  const bbProviderOnly = runScript(
+    "bettbox-flclash.js",
+    {
+      proxies: [],
+      "proxy-providers": {
+        airport: {
+          type: "http",
+          url: "https://example.invalid/sub",
+          path: "./providers/airport.yaml",
+          interval: 3600,
+        },
+      },
+    },
+    1,
+  );
+  const bbProviderAll = (bbProviderOnly["proxy-groups"] ?? []).find(
+    (g) => g.name === "All",
+  );
+  assert(
+    bbProviderAll?.["include-all"] === true,
+    "[bettbox] 仅 proxy-providers 的订阅仍按 include-all 分组",
+  );
+
+  // 零节点边界
+  const emptyBettbox = runScript(
+    "bettbox-flclash.js",
+    { "proxy-providers": {} },
+    1,
+  );
+  const emptyBbMain = (emptyBettbox["proxy-groups"] ?? []).find(
+    (g) => g.name === "main",
+  );
+  assert(
+    emptyBbMain &&
+      JSON.stringify(emptyBbMain.proxies) === JSON.stringify(["DIRECT"]),
+    "[bettbox] 无节点来源时 main 回退 DIRECT",
+  );
+  assertRuleTargets("bettbox-empty", emptyBettbox);
+}
+
 // ============ 导出内核校验用 YAML + 同步产物 ============
 if (failed) {
   console.error("\n验证失败，产物未复制到仓库根目录。");
@@ -560,6 +747,17 @@ if (failed) {
       lineWidth: -1,
     }),
   );
+  writeFileSync(
+    new URL("../dist/test-bettbox.yaml", import.meta.url),
+    yaml.dump(bettbox, { lineWidth: -1 }),
+  );
+  writeFileSync(
+    new URL("../dist/test-bettbox-empty.yaml", import.meta.url),
+    yaml.dump(
+      runScript("bettbox-flclash.js", { "proxy-providers": {} }, 1),
+      { lineWidth: -1 },
+    ),
+  );
   copyFileSync(
     new URL("../dist/mihomo-proxy.js", import.meta.url),
     new URL("../mihomo-proxy.js", import.meta.url),
@@ -571,6 +769,10 @@ if (failed) {
   copyFileSync(
     new URL("../dist/flclash-mobile.js", import.meta.url),
     new URL("../flclash-mobile.js", import.meta.url),
+  );
+  copyFileSync(
+    new URL("../dist/bettbox-flclash.js", import.meta.url),
+    new URL("../bettbox-flclash.js", import.meta.url),
   );
   console.log(
     "\n全部通过：产物已同步到仓库根目录，内核校验 YAML 已导出到 dist/。",

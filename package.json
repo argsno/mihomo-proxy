@@ -5,7 +5,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "build": "vite build && vite build --mode simple && vite build --mode flclash && node scripts/verify.mjs",
+    "build": "vite build && vite build --mode simple && vite build --mode flclash && vite build --mode bettbox && node scripts/verify.mjs",
     "verify": "node scripts/verify.mjs",
     "verify:kernel": "node scripts/verify-kernel.mjs",
     "verify:runtime": "node scripts/verify-runtime.mjs",

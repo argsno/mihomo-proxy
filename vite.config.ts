@@ -59,6 +59,42 @@ const SIMPLE = {
  */`,
 };
 
+const BETTBOX = {
+  entry: "src/bettbox.ts",
+  name: "__mihomoBettbox",
+  fileName: "bettbox-flclash.js",
+  banner: `/**
+ * bettbox-flclash — Bettbox / FlClash 系列专属覆写脚本 v3.0
+ * ------------------------------------------------------------------
+ * 面向 Bettbox 与 FlClash 系列客户端的完整分流覆写脚本。
+ * 集成 Compatible_With_Bettbox 可视化开关适配、include-all 运行时
+ * 节点纳入、完整分流策略组（Google/YouTube/AI/Telegram/Steam/Apple/
+ * Microsoft）、以及按地区自动分组（HK/TW/JP/SG/KR/US/EU/AU/AS）。
+ *
+ * ── Bettbox 可视化开关 ───────────────────────────────────────────
+ * 本脚本首行的 Compatible_With_Bettbox 声明会被 Bettbox（v1.18.8+）
+ * 自动识别，在客户端 UI 中渲染可视化配置面板，用户可直接通过开关
+ * 控制各分流策略组和地区分组的启用/禁用。
+ *
+ * ── 用法 ──────────────────────────────────────────────────────────
+ * 设置 → 高级设置 → 脚本 → 添加 →（右上角可远程下载本脚本链接）→
+ * 保存；再到 配置 → 对应订阅 → 覆写 → 模式选「脚本」→ 勾选本脚本。
+ *
+ * ── 必须在 App 内正确的设置（脚本无法覆盖，会被 App 强制改写）────
+ *  1. 设置 → 网络 →「覆写 DNS」保持【关闭】
+ *  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
+ *  3. 出站模式选「规则」；TUN 栈选 mixed；
+ *     「查找进程」建议设为 off
+ *
+ * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
+ *
+ * 仓库地址：https://github.com/wchiway/mihomo-proxy
+ * 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-flclash.js
+ * 客户端：https://github.com/appshubcc/Bettbox | https://github.com/chen08209/FlClash
+ */
+const Compatible_With_Bettbox = { ruleOptionsEnable: true };`,
+};
+
 const FLCLASH = {
   entry: "src/flclash.ts",
   name: "__mihomoFlClash",
@@ -100,7 +136,13 @@ const FLCLASH = {
 
 export default defineConfig(({ mode }) => {
   const variant =
-    mode === "simple" ? SIMPLE : mode === "flclash" ? FLCLASH : FULL;
+    mode === "simple"
+      ? SIMPLE
+      : mode === "flclash"
+        ? FLCLASH
+        : mode === "bettbox"
+          ? BETTBOX
+          : FULL;
   return {
     build: {
       lib: {
@@ -113,7 +155,7 @@ export default defineConfig(({ mode }) => {
       minify: false, // 保持产物可读、便于用户审计
       outDir: "dist",
       // 完整版先构建并清空 dist，极简版 / 手机版随后追加
-      emptyOutDir: mode !== "simple" && mode !== "flclash",
+      emptyOutDir: mode !== "simple" && mode !== "flclash" && mode !== "bettbox",
       rolldownOptions: {
         output: {
           banner: variant.banner,
