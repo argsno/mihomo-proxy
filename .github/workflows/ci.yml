@@ -31,7 +31,7 @@ jobs:
       - name: 单元测试
         run: pnpm test
 
-      - name: 构建三产物 + node:vm 冒烟断言
+      - name: 构建四产物 + node:vm 冒烟断言
         run: pnpm build
 
       # 内核校验必须先于产物提交：raw 链接即发布渠道，只有内核能抓到的
@@ -54,10 +54,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add mihomo-proxy.js simple-mihomo.js flclash-mobile.js
+          git add mihomo-proxy.js simple-mihomo.js flclash-mobile.js bettbox-flclash.js
           git diff --cached --quiet || git commit -m "chore: 同步构建产物 [skip ci]"
           git push
 
       - name: 产物与源码一致性（PR 检查）
         if: github.event_name == 'pull_request'
-        run: git diff --exit-code mihomo-proxy.js simple-mihomo.js flclash-mobile.js
+        run: git diff --exit-code mihomo-proxy.js simple-mihomo.js flclash-mobile.js bettbox-flclash.js

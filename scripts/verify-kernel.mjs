@@ -55,9 +55,11 @@ for (const file of [
   "test-full.yaml",
   "test-simple.yaml",
   "test-flclash.yaml",
+  "test-bettbox.yaml",
   "test-full-empty.yaml",
   "test-simple-empty.yaml",
   "test-flclash-empty.yaml",
+  "test-bettbox-empty.yaml",
 ]) {
   const cfg = path.join(distDir, file);
   if (!existsSync(cfg)) {

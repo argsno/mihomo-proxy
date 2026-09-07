@@ -6,31 +6,35 @@ mihomo（Clash Meta）配置增强脚本 · Ultimate Stable Edition v3.0
 
 ---
 
-## 三个版本，按需选择
+## 四个版本，按需选择
 
-|                      | mihomo-proxy.js（完整版）                                    | simple-mihomo.js（极简版）         | flclash-mobile.js（手机版）        |
-| -------------------- | ------------------------------------------------------------ | ---------------------------------- | ---------------------------------- |
-| 目标客户端           | Sparkle / Clash Verge Rev                                    | Sparkle / Clash Verge Rev          | **FlClash**（安卓 / iOS / 桌面）   |
-| 策略组数量           | 20+（地区组 + 服务组）                                       | 3 个                               | 3 个                               |
-| 地区分组             | HK / TW / JP / SG / KR / US / EU / AU / AS + Other           | 无                                 | 无                                 |
-| 服务组               | Google / YouTube / AI / Telegram / Steam / Apple / Microsoft | 统一收敛到「全部」                 | 统一收敛到「全部」                 |
-| 节点纳入方式         | 脚本枚举节点名（可排序）                                     | 脚本枚举节点名（可排序）           | 内核 `include-all` 运行时纳入      |
-| proxy-providers 订阅 | 不支持（只读 `proxies`）                                     | 不支持                             | ✅ 支持                            |
-| 订阅增删节点         | 需重新应用脚本                                               | 需重新应用脚本                     | ✅ 自动跟随                        |
-| AI 纯净池            | ✅ 剔除香港                                                  | ✅ 剔除香港                        | ✅ 剔除香港                        |
-| 广告拦截             | 固定 REJECT                                                  | 「广告拦截」组可切 REJECT / DIRECT | 同极简版                           |
-| 分流规则 / DNS / TUN | 同一套                                                       | 同一套                             | 同一套                             |
-| 适合人群             | 想精细控制每类服务出口                                       | 只想选个节点就用                   | 手机上用，怕麻烦                   |
+|                      | mihomo-proxy.js（完整版）                                    | simple-mihomo.js（极简版）         | flclash-mobile.js（FlClash 极简版） | bettbox-flclash.js（Bettbox 专属完整版） |
+| -------------------- | ------------------------------------------------------------ | ---------------------------------- | ----------------------------------- | ---------------------------------------- |
+| 目标客户端           | Sparkle / Clash Verge Rev                                    | Sparkle / Clash Verge Rev          | **FlClash**（手机 / 极简用户）      | **Bettbox** / **FlClash**（全平台）      |
+| 策略组数量           | 20+（地区组 + 服务组）                                       | 3 个                               | 3 个                                | 20+（完整服务组 + 地区组）               |
+| 地区分组             | HK / TW / JP / SG / KR / US / EU / AU / AS + Other           | 无                                 | 无                                  | HK / TW / JP / SG / KR / US / EU / AU / AS + Other（可开关） |
+| 服务组               | Google / YouTube / AI / Telegram / Steam / Apple / Microsoft | 统一收敛到「全部」                 | 统一收敛到「全部」                  | Google / YouTube / AI / Telegram / Steam / Apple / Microsoft / Spotify（各可独立开关） |
+| 节点纳入方式         | 脚本枚举节点名（可排序）                                     | 脚本枚举节点名（可排序）           | 内核 `include-all` 运行时纳入       | 内核 `include-all` 运行时纳入            |
+| proxy-providers 订阅 | 不支持（只读 `proxies`）                                     | 不支持                             | ✅ 支持                             | ✅ 支持                                  |
+| 订阅增删节点         | 需重新应用脚本                                               | 需重新应用脚本                     | ✅ 自动跟随                         | ✅ 自动跟随                              |
+| AI 纯净池            | ✅ 剔除香港                                                  | ✅ 剔除香港                        | ✅ 剔除香港                         | ✅ 剔除香港（可开关）                    |
+| 广告拦截             | 固定 REJECT                                                  | 「广告拦截」组可切 REJECT / DIRECT | 同极简版                            | 「广告拦截」组可切 REJECT / DIRECT / main（可开关） |
+| UI 可视化开关        | ❌ 无                                                        | ❌ 无                              | ❌ 无                               | ✅ 原生适配（`Compatible_With_Bettbox`） |
+| 分流规则 / DNS / TUN | 同一套                                                       | 同一套                             | 同一套                              | 同一套                                   |
+| 适合人群             | 想精细控制每类服务出口（桌面端）                             | 只想选个节点就用（桌面端）         | 手机上用，追求极简与省电            | **Bettbox / FlClash 用户，既要完整分流与地区分组，又要免重载与可视化开关** |
 
 ```text
-# 完整版
+# 完整版（桌面端）
 https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/mihomo-proxy.js
 
-# 极简版
+# 极简版（桌面端）
 https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/simple-mihomo.js
 
-# 手机版（FlClash）
+# 手机版（FlClash 极简版）
 https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/flclash-mobile.js
+
+# Bettbox / FlClash 系列专属版（完整分流 + 地区分组 + 可视化开关）
+https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-flclash.js
 ```
 
 ---
@@ -68,6 +72,14 @@ https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/flclash-m
 增删节点后无需重新应用脚本，`proxy-providers` 型订阅也能正确分组，
 生成的配置里不含成百上千行节点名，手机上加载更快。测速间隔放宽到 600s、
 容差 80ms，降低后台唤醒频率与移动网络抖动导致的频繁切换。
+
+Bettbox / FlClash 系列专属版（`bettbox-flclash.js`）：
+
+兼具桌面完整版的丰富策略组与移动端的轻量动态架构：
+- **完整策略组体系**：`main`（主入口）/ `All` / `GLOBAL` / `AI`（排除香港）/ `Google` / `YouTube` / `Telegram` / `Steam` / `Apple` / `Microsoft` / `Spotify` / `广告拦截`
+- **地区自动分组**：HK / TW / JP / SG / KR / US / EU / AU / AS 与 `Other`（非地区节点），每组包含专属隐藏自动测速与手动选择
+- **节点动态纳入**：采用 `include-all: true` + 地区 `filter` 与通用 `exclude-filter`，订阅更新或节点变动无需重新应用脚本，全面兼容 `proxy-providers` 订阅
+- **Bettbox 可视化开关原生适配**：脚本首行声明 `const Compatible_With_Bettbox = { ruleOptionsEnable: true };`，在 Bettbox（v1.18.8+）客户端覆写面板中直接呈现可视化开关，用户无需改动代码即可一键启闭任意服务分流组或地区分组（关闭的服务流量自动平滑回流至 `main` 组）
 
 ### 3. DNS 架构（防泄露 Smart 分流）
 
@@ -112,15 +124,18 @@ https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/flclash-m
 2. 添加完整版或极简版脚本链接（或下载后本地引用）
 3. 应用到订阅配置，重启内核（建议 TUN 模式）
 
-### 手机（FlClash）
+### 手机与全平台客户端（Bettbox / FlClash）
 
-1. 设置 → 高级设置 → **脚本** → 添加 → 右上角可直接远程下载
-   `flclash-mobile.js` 的链接 → 保存
+1. 设置 → 高级设置 → **脚本** → 添加 → 右上角远程下载脚本链接：
+   - 想要完整策略组 + 可视化开关：使用 `bettbox-flclash.js` 链接
+   - 想要极简三组：使用 `flclash-mobile.js` 链接
+   - 保存脚本
 2. 配置 → 选中你的订阅 → **覆写** → 模式选「**脚本**」→ 勾选刚添加的脚本
-3. 回到首页启动
+3. **（Bettbox 独占）可视化开关**：如果使用 Bettbox（v1.18.8+），进入该覆写设置界面可直接看到可视化开关面板，直接勾选/取消勾选即可动态控制各分流策略组与地区分组的启闭
+4. 回到首页启动代理
 
-**必须核对的 App 设置**（这些字段由 FlClash 在脚本执行后强制改写，
-脚本内写什么都不生效，详见 `src/flclash-main.ts` 顶部注释）：
+**必须核对的 App 设置**（这些字段由 FlClash/Bettbox 在脚本执行后强制改写，
+脚本内写什么都不生效，详见 `src/flclash-main.ts` / `src/bettbox-main.ts` 顶部注释）：
 
 | App 设置项                   | 应设为          | 不这么设的后果                                          |
 | ---------------------------- | --------------- | ------------------------------------------------------- |
@@ -207,20 +222,23 @@ regexp2 匹配），所以自定义时注意别让它命中「自动测速」「
 ```text
 mihomo-proxy.js    # 完整版（构建产物，请勿手改）
 simple-mihomo.js   # 极简版（构建产物，请勿手改）
-flclash-mobile.js  # 手机版 / FlClash（构建产物，请勿手改）
-src/               # 三版共享的 TypeScript 源码
+flclash-mobile.js  # 手机极简版 / FlClash（构建产物，请勿手改）
+bettbox-flclash.js # Bettbox / FlClash 专属版（构建产物，请勿手改）
+src/               # 四版共享的 TypeScript 源码
 ├── index.ts       #   完整版打包入口
 ├── simple.ts      #   极简版打包入口
-├── flclash.ts     #   手机版打包入口
+├── flclash.ts     #   手机极简版打包入口
+├── bettbox.ts     #   Bettbox 专属版打包入口
 ├── main.ts        #   完整版主流程（服务级独立策略组）
 ├── simple-main.ts #   极简版主流程（全部 / AI / 广告拦截 三组）
-├── flclash-main.ts#   手机版主流程（同三组，节点走内核 include-all）
-├── user-config.ts #   用户自定义区（三版共享）
+├── flclash-main.ts#   手机极简版主流程（同三组，节点走内核 include-all）
+├── bettbox-main.ts#   Bettbox 专属版主流程（全量服务组 + 地区组 + 可视化开关适配）
+├── user-config.ts #   用户自定义区（四版共享）
 ├── settings.ts    #   常量配置（SETTINGS / DNS_SERVERS / Fake-IP）
 ├── utils.ts       #   工具函数（倍率/线路解析缓存等）
 ├── regions.ts     #   地区定义（完整版用）
 ├── rule-providers.ts # 规则集（key ↔ 远端文件名解耦）
-├── rules.ts       #   分流规则骨架（出口目标参数化，三版注入各自策略组名）
+├── rules.ts       #   分流规则骨架（出口目标参数化，四版注入各自策略组名）
 ├── proxies.ts     #   节点分类
 ├── proxy-groups.ts#   完整版策略组生成
 ├── dns.ts         #   DNS 防泄露架构
@@ -230,7 +248,7 @@ tests/             # vitest 单元测试（工具函数 / 规则 / 节点分类�
 scripts/verify.mjs         # 第 1 级校验：node:vm 冒烟断言 + YAML 导出
 scripts/verify-kernel.mjs  # 第 2 级校验：真实 mihomo 内核 -t
 scripts/verify-runtime.mjs # 第 3 级校验：启动内核查 API，验策略组运行时成员
-vite.config.ts     # Vite 8 库模式三产物构建配置
+vite.config.ts     # Vite 8 库模式四产物构建配置
 .github/workflows/ci.yml  # CI：类型检查 → 单测 → 构建 → 内核校验（发布闸门）→ 产物提交/一致性
 ```
 
@@ -238,8 +256,8 @@ vite.config.ts     # Vite 8 库模式三产物构建配置
 
 ## 构建与开发（Vite 8 全 Rust 工具链）
 
-三份产物均由 **Vite 8 + TypeScript** 从同一份 `src/` 构建生成——规则骨架、
-规则集、DNS、TUN 在源码层共享，**构建期即保证三版一致，不再手工同步**。
+四份产物均由 **Vite 8 + TypeScript** 从同一份 `src/` 构建生成——规则骨架、
+规则集、DNS、TUN 在源码层共享，**构建期即保证四版一致，不再手工同步**。
 Vite 8 已用 Rolldown（打包）+ Oxc（转换/压缩）的全 Rust 工具链取代
 esbuild + Rollup,本项目直接使用其原生配置（`rolldownOptions`）。
 
@@ -247,7 +265,7 @@ esbuild + Rollup,本项目直接使用其原生配置（`rolldownOptions`）。
 pnpm install        # 安装依赖（Node 20+ / pnpm 11+，lock 文件已入库）
 pnpm typecheck      # tsc 类型检查
 pnpm test           # vitest 单元测试
-pnpm build          # 三产物构建 → node:vm 冒烟断言 → 同步到仓库根目录
+pnpm build          # 四产物构建 → node:vm 冒烟断言 → 同步到仓库根目录
 pnpm verify:kernel  # 真实内核 -t 校验（需本地 mihomo 或设 MIHOMO_BIN）
 pnpm verify:runtime # 启动内核查 API，验 include-all / exclude-filter 实际生效
 ```
@@ -269,6 +287,16 @@ pnpm verify:runtime # 启动内核查 API，验 include-all / exclude-filter 实
 ---
 
 ## 更新日志
+
+### v3.1（2026-09）
+
+- **新增 Bettbox / FlClash 系列专属版 `bettbox-flclash.js`**：
+  - 首行适配 Bettbox 的 `Compatible_With_Bettbox = { ruleOptionsEnable: true }` 可视化配置开关声明，在客户端 UI 中直接呈现可视化控制面板
+  - 继承 `include-all` + `filter` / `exclude-filter` 模式：所有订阅节点在内核运行时自动归类，订阅更新与节点变动无需手动重新应用脚本，全面兼容 `proxy-providers` 订阅
+  - 支持全套精细独立分流策略组（Google / YouTube / AI / Telegram / Steam / Apple / Microsoft / Spotify / 广告拦截 / GLOBAL）
+  - 支持按地区自动分组（HK / TW / JP / SG / KR / US / EU / AU / AS 与 Other），每组包含专属隐藏自动测速与手动选择
+  - 每个分流服务组与地区分组均与 Bettbox 可视化开关深度联动，关闭后流量自动平滑回退至 `main` 组
+  - CI 与三级校验测试流水线升级为四产物全覆盖（增加 40+ 项 Bettbox 专属断言与内核 `-t` 校验）
 
 ### v3.0（2026-08）
 
