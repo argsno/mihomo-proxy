@@ -13,29 +13,26 @@ import { applyDns } from "./dns";
 import { applyRuntime, applySniffer, applyTun } from "./runtime";
 import type { ClashConfig, Proxy, ProxyGroup } from "./types";
 
-// ============================================================
-// simple-mihomo —— 极简业务分流版
-// ------------------------------------------------------------
-// mihomo-proxy 的极简姊妹版：保留全部业务分流与 DNS/TUN 优化
-// （规则骨架、规则集、DNS、Runtime 与完整版共享同一份源码模块），
-// 但策略组只有三个，节点不做地区分组，简洁好理解：
-//
-//   全部     —— 所有节点（内置自动测速，默认自动选优）
-//   AI       —— 可访问 AI 服务的纯净节点（自动剔除香港，OpenAI 等封锁 HK 出口）
-//   广告拦截 —— REJECT（默认拦截）/ DIRECT / 全部 三选一
-// ============================================================
+/**
+ * 极简业务分流版主流程（Sparkle / Clash Verge Rev）
+ * ------------------------------------------------------------------
+ * 策略组收敛为三个核心组：
+ * - 全部：汇总所有节点并内置自动测速（默认自动选优）
+ * - AI：剔除香港出口的纯净节点池（内置独立测速）
+ * - 广告拦截：REJECT / DIRECT / 全部 可切换
+ */
 
-/** 三个策略组的名称（规则出口统一引用这里，避免魔法字符串） */
+/** 三个策略组的名称定义 */
 const GROUPS = {
   ALL: "全部",
   AI: "AI",
   ADBLOCK: "广告拦截",
 };
 
-/** 香港节点识别（AI 组需剔除，OpenAI/Claude 等常封锁 HK 出口） */
+/** 香港节点识别正则（AI 服务需剔除香港出口） */
 const HK_FILTER = /香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰/i;
 
-/** 极简版分流出口：广告独立成组可切换，其余全部收敛到「全部/AI」 */
+/** 极简版分流出口映射：除广告与 AI 外均收敛至「全部」 */
 const SIMPLE_RULE_TARGETS: RuleTargets = {
   adblock: GROUPS.ADBLOCK,
   ai: GROUPS.AI,
@@ -50,14 +47,12 @@ const SIMPLE_RULE_TARGETS: RuleTargets = {
 
 const STATIC_RULES = buildStaticRules(SIMPLE_RULE_TARGETS);
 
-// ============================================================
-// Proxies —— 节点处理（去重 → 过滤 → 分池）
-// ============================================================
+// --- 节点处理（去重、过滤与 AI 纯净池构建） ---
 
 /**
- * 从订阅节点得到两个节点池：
- *   allNames —— 全部可用节点（剔除自定义过滤与信息类节点）
- *   aiNames  —— AI 纯净池（在 allNames 基础上剔除香港；全被剔则回退 allNames）
+ * 构建节点池：
+ * - allNames: 全部可用节点（剔除自定义过滤与广告信息节点）
+ * - aiNames: AI 专用池（排除香港节点；全排除则回退至 allNames）
  */
 const buildProxyPools = (
   proxies: Proxy[] = [],
@@ -74,9 +69,7 @@ const buildProxyPools = (
   return { allNames, aiNames: nonHk.length ? nonHk : allNames };
 };
 
-// ============================================================
-// ProxyGroups —— 仅三个策略组：全部 / AI / 广告拦截
-// ============================================================
+// --- 策略组生成 ---
 
 const buildSimpleProxyGroups = ({
   allNames,
@@ -152,9 +145,7 @@ const buildSimpleProxyGroups = ({
   return groups;
 };
 
-// ============================================================
-// Main
-// ============================================================
+// --- 主入口 ---
 
 export function simpleMain(config: ClashConfig): ClashConfig {
   config = config && typeof config === "object" ? config : {};

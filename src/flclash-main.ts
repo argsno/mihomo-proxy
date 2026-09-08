@@ -12,32 +12,15 @@ import { applyRuntime, applySniffer, applyTun } from "./runtime";
 import { makeProxyNamesUnique } from "./proxies";
 import type { ClashConfig, Proxy, ProxyGroup } from "./types";
 
-// ============================================================
-// flclash-mobile —— FlClash（手机端）专用覆写脚本
-// ------------------------------------------------------------
-// 与 simple-mihomo 同样的三个策略组、同一套业务分流 / DNS / TUN 源码，
-// 但节点纳入方式改为内核侧 include-all + 正则过滤：
-//
-//   - 订阅更新、机场加减节点后无需重新应用脚本，策略组自动跟随
-//   - 同时支持 proxies 与 proxy-providers 两种订阅形态
-//     （手机端订阅常为 proxy-providers，逐个枚举节点名的写法会分组为空）
-//   - 生成的配置不再内联几百行节点名，手机上加载/切换更快
-//
-// FlClash 运行时约定（lib/common/javascript.dart）：
-//   引擎为 flutter_js → QuickJS（非 Sparkle 的 boa_engine），
-//   调用形式 `{脚本}\nmain({配置JSON})`，只传 1 个参数，返回值须可 JSON 序列化。
-//
-// FlClash 会在本脚本执行完毕后再打一层补丁（lib/common/task.dart
-// _makeRealProfileTask），以下字段一律由 App 设置覆盖，脚本写入无效：
-//   mode / log-level / ipv6 / find-process-mode / tcp-concurrent /
-//   unified-delay / keep-alive-interval / 各端口 / allow-lan /
-//   geodata-loader / geox-url / global-ua / profile.store-selected，
-//   以及 tun 的 enable / device / stack / dns-hijack / auto-route /
-//   route-address（tun 的 mtu / strict-route 等其余字段仍保留）。
-// 因此这些项需要在 App 内自行设置，对应指引见产物文件头部注释。
-// 保留生效的部分：rules / proxy-groups / rule-providers / dns / sniffer /
-// hosts —— 也就是本脚本的核心价值所在。
-// ============================================================
+/**
+ * FlClash 手机端极简版覆写脚本
+ * ------------------------------------------------------------------
+ * 核心设计：
+ * 1. 采用三个极简策略组（全部 / AI / 广告拦截）
+ * 2. 节点纳入方式采用内核 include-all + exclude-filter，订阅更新无需重新执行脚本
+ * 3. 完美兼容 proxy-providers 与普通 proxies 订阅
+ * 4. 适配 QuickJS 单参数 main(config) 运行时
+ */
 
 /** 三个策略组的名称（规则出口统一引用这里，避免魔法字符串） */
 const GROUPS = {
@@ -70,14 +53,11 @@ const MOBILE_RULE_TARGETS: RuleTargets = {
 
 const STATIC_RULES = buildStaticRules(MOBILE_RULE_TARGETS);
 
-// ============================================================
-// 节点过滤器 —— JS RegExp → mihomo filter 字符串
-// ============================================================
+// --- 节点过滤器（RegExp → dlclark/regexp2 正则转换） ---
 
 /**
  * 取正则源码，空正则返回 ""。
- * 空 RegExp 的 source 是 "(?:)"，直接拼进过滤器会匹配空串，
- * 导致 exclude-filter 命中每一个节点名（组被清空）。
+ * 空 RegExp 的 source 是 "(?:)"，直接拼进过滤器会匹配空串导致所有节点被排除。
  */
 const filterSource = (re: RegExp): string => {
   const src = re && re.source ? String(re.source) : "";
@@ -86,47 +66,33 @@ const filterSource = (re: RegExp): string => {
 
 /**
  * 合并多个正则为一条 exclude-filter。
- *
- * mihomo 的 filter / exclude-filter 由 dlclark/regexp2 编译（.NET 风格，
- * 非 Go RE2），支持 `(?i)` 内联选项。这里统一包进非捕获组再前置 `(?i)`：
- * 若写成 `(?i)a|b`，内联标志的作用域容易随实现产生歧义，
- * `(?i)(?:a|b)` 则明确对全部分支生效。
- * 返回空串表示不设置该字段（不能下发空字符串，会被当成匹配空串）。
+ * 统一包装进非捕获组 `(?i)(?:...)`，确保对全部分支生效。
  */
 const buildExcludeFilter = (...regexps: RegExp[]): string => {
   const parts = regexps.map(filterSource).filter(Boolean);
   return parts.length ? `(?i)(?:${parts.join("|")})` : "";
 };
 
-/** 通用排除：机场信息类节点（到期/流量/官网）+ 用户自定义过滤 */
+/** 通用排除：机场信息类节点 + 用户自定义过滤 */
 const EXCLUDE_COMMON = buildExcludeFilter(SETTINGS.INFO_FILTER, CUSTOM_FILTER);
-/** AI 组排除：在通用排除基础上再剔除香港 */
+/** AI 组排除：通用排除 + 香港节点 */
 const EXCLUDE_AI = buildExcludeFilter(
   SETTINGS.INFO_FILTER,
   CUSTOM_FILTER,
   HK_FILTER,
 );
 
-/** 仅在过滤器非空时写入字段，避免下发 `exclude-filter: ""` */
+/** 仅在过滤器非空时写入字段，避免下发空字符串 */
 const withExclude = (group: ProxyGroup, filter: string): ProxyGroup =>
   filter ? { ...group, "exclude-filter": filter } : group;
 
 /**
- * include-all 组的空成员兜底（内核 v1.19.27+ 的 `empty-fallback`）。
- *
- * parser.go 里 include-all 的分支：过滤后一个成员都不剩时，组成员会被
- * 置成 `[]string{EmptyFallback}`，默认值是 COMPATIBLE。COMPATIBLE 实为
- * outbound.NewCompatible() 返回的 Direct（只是 Type 不同），行为等同直连，
- * 但在 UI 上显示为一个语义不明的名字。显式写成 DIRECT 后：
- *   - 用户把 CUSTOM_FILTER 写太宽导致组被清空时，App 里能一眼看出是直连
- *   - 行为与「无节点来源」分支的 DIRECT 回退保持一致
- * 注意：empty-fallback 只接受 proxy 名，填策略组会被内核直接判错。
+ * include-all 组的空成员兜底（empty-fallback）。
+ * 过滤后空组显式回退至 DIRECT，避免 UI 显示含混的 COMPATIBLE。
  */
 const EMPTY_FALLBACK = { "empty-fallback": "DIRECT" };
 
-// ============================================================
-// ProxyGroups —— 三个策略组（节点由内核 include-all 运行时纳入）
-// ============================================================
+// --- 策略组构建 ---
 
 /**
  * 订阅是否提供了节点来源。
@@ -248,9 +214,7 @@ const buildMobileProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   ];
 };
 
-// ============================================================
-// Main
-// ============================================================
+// --- 主入口 ---
 
 export function flclashMain(config: ClashConfig): ClashConfig {
   config = config && typeof config === "object" ? config : {};

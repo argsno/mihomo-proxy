@@ -6,9 +6,11 @@ import type {
   RegionGroup,
 } from "./types";
 
-// ============================================================
-// 6. Classifier —— 节点处理与分类
-// ============================================================
+/**
+ * 代理节点处理与分类
+ * ------------------------------------------------------------------
+ * 负责节点的重名去重、无效信息过滤、地区正则归类与排序。
+ */
 
 export const ensureConfigObject = (input: unknown): ClashConfig =>
   input && typeof input === "object" ? (input as ClashConfig) : {};
@@ -70,8 +72,8 @@ export interface RegionClassification {
 }
 
 /**
- * 按地区分类，并对每个地区/Other 组内节点自动排序。
- * 单次遍历完成匹配（Plan 16：避免重复遍历）。
+ * 按地区分类，并对每个地区/Other 组内节点自动按线路与倍率排序。
+ * 通过单次遍历完成正则匹配。
  */
 export const classifyProxiesByRegion = (
   normalProxies: Proxy[] = [],

@@ -12,45 +12,22 @@ import { applyRuntime, applySniffer, applyTun } from "./runtime";
 import { makeProxyNamesUnique } from "./proxies";
 import type { ClashConfig, Proxy, ProxyGroup } from "./types";
 
-// ============================================================
-// bettbox-flclash —— Bettbox / FlClash 系列专属覆写脚本
-// ------------------------------------------------------------
-// 在 flclash-mobile 的 include-all + exclude-filter 架构基础上，
-// 扩展为完整分流策略组（Google/YouTube/AI/Telegram/Steam/Apple/
-// Microsoft/Spotify）、按地区自动分组（HK/TW/JP/SG/KR/US/EU/AU/AS）、
-// 并集成 Bettbox 独有的 Compatible_With_Bettbox 声明 + ruleOptionsEnable
-// 可视化开关适配。
-//
-// 核心设计：
-//   - 节点纳入方式：内核侧 include-all + filter/exclude-filter
-//     （运行时动态纳入，订阅更新无需重新应用脚本，proxy-providers 也能正确分组）
-//   - 地区分组：每个地区一对 url-test + select，通过 filter 匹配地区关键词
-//   - 分流策略组：每个服务一个 select 组，可通过 ruleOptionsEnable 逐个关闭
-//   - Bettbox UI 适配：首行 Compatible_With_Bettbox 声明激活可视化开关面板
-//
-// 运行时约定与 FlClash 一致（lib/common/javascript.dart）：
-//   引擎为 flutter_js → QuickJS，调用形式 `main(config)` 只传 1 个参数。
-//   FlClash/Bettbox 在脚本执行后会强制改写的字段同 flclash-main.ts 头注释。
-// ============================================================
-
-// ============================================================
-// Bettbox 兼容声明 —— 运行时不参与逻辑，Bettbox 通过静态文本扫描
-// 脚本首行来识别此声明，从而在 UI 中渲染可视化配置面板。
-// 本文件中此常量会被 Vite banner 注入到产物首行（脚本顶层作用域），
-// 因此这里只需定义 ruleOptionsEnable 供逻辑使用。
-// ============================================================
+/**
+ * Bettbox / FlClash 系列专属覆写脚本
+ * ------------------------------------------------------------------
+ * 特性组合：
+ * 1. 结合完整版丰富分流策略组（Google/YouTube/AI/Telegram/Steam/Apple/Microsoft/Spotify）
+ * 2. 结合移动端 include-all + filter 运行时动态节点匹配架构
+ * 3. 深度适配 Bettbox（v1.18.8+）可视化配置开关（Compatible_With_Bettbox）
+ * 4. 节点更新无需重载脚本，全面兼容 proxy-providers 订阅
+ */
 
 /**
- * 可视化开关配置对象。
- * Bettbox 会从产物文件中读取 `ruleOptionsEnable` 的 key-value，
- * 在客户端 UI 中生成对应的 toggle switch：
- *   - 分流策略：控制对应服务分流到专属策略组还是回退到 main 组
- *   - 节点管理：控制地区分组、QUIC 屏蔽等行为
- *
- * 用户在 Bettbox 中切换开关后，会修改此对象的值并重新执行脚本。
+ * Bettbox 可视化开关配置对象
+ * Bettbox 客户端会读取此处键值并在 UI 中自动渲染图形化开关。
  */
 const ruleOptionsEnable: Record<string, boolean> = {
-  // 分流策略
+  // 分流策略组开关
   Google: true,
   YouTube: true,
   AI: true,
@@ -60,14 +37,13 @@ const ruleOptionsEnable: Record<string, boolean> = {
   Microsoft: true,
   Spotify: true,
   广告拦截: true,
-  // 节点管理
+
+  // 节点与网络行为管理
   地区分组: true,
   屏蔽QUIC: true,
 };
 
-// ============================================================
-// 策略组名常量
-// ============================================================
+// --- 策略组名称定义 ---
 
 const GROUPS = {
   MAIN: "main",
@@ -88,22 +64,18 @@ const GROUPS = {
 /** 测速组名前缀 */
 const URL_TEST_PREFIX = "URL Test - ";
 
-// ============================================================
-// 地区 filter 映射（include-all 的 filter 字段使用）
-// ============================================================
+// --- 地区正则过滤规则定义 ---
 
 interface RegionDef {
   name: string;
-  /** include-all filter 正则（dlclark/regexp2 .NET 风格） */
+  /** include-all filter 正则（dlclark/regexp2 格式） */
   filter: string;
   icon: string;
 }
 
 /**
- * 地区定义与 filter 正则。
- * filter 使用 (?i) 内联不区分大小写标志，格式为 (?i)(?:pattern1|pattern2)。
- * dlclark/regexp2 支持 Unicode 但不保证与 JS RegExp 完全一致，
- * 这里尽量使用简单的字面量匹配。
+ * 地区定义与 filter 正则
+ * 使用 (?i)(?:pattern1|pattern2) 语法统一包裹。
  */
 const REGION_DEFS: RegionDef[] = [
   {
@@ -175,17 +147,14 @@ const REGION_ORDER = [
   "AS",
 ];
 
-// ============================================================
-// 节点过滤器 —— JS RegExp → mihomo filter 字符串
-// ============================================================
+// --- 节点过滤器（RegExp → dlclark/regexp2 正则转换） ---
 
-/** 香港节点识别（AI 组需剔除，OpenAI/Claude 等常封锁 HK 出口） */
+/** 香港节点识别（AI 组需剔除香港出口） */
 const HK_FILTER = /香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰/i;
 
 /**
  * 取正则源码，空正则返回 ""。
- * 空 RegExp 的 source 是 "(?:)"，直接拼进过滤器会匹配空串，
- * 导致 exclude-filter 命中每一个节点名（组被清空）。
+ * 空 RegExp 的 source 是 "(?:)"，直接拼入过滤器会匹配空串导致所有节点被排除。
  */
 const filterSource = (re: RegExp): string => {
   const src = re && re.source ? String(re.source) : "";
@@ -194,32 +163,28 @@ const filterSource = (re: RegExp): string => {
 
 /**
  * 合并多个正则为一条 exclude-filter。
- *
- * mihomo 的 filter / exclude-filter 由 dlclark/regexp2 编译（.NET 风格），
- * 支持 `(?i)` 内联选项。统一包进非捕获组 `(?i)(?:...)` 确保对全部分支生效。
- * 返回空串表示不设置该字段。
+ * 统一包装进非捕获组 `(?i)(?:...)`，确保对全部分支生效。
  */
 const buildExcludeFilter = (...regexps: RegExp[]): string => {
   const parts = regexps.map(filterSource).filter(Boolean);
   return parts.length ? `(?i)(?:${parts.join("|")})` : "";
 };
 
-/** 通用排除：机场信息类节点（到期/流量/官网）+ 用户自定义过滤 */
+/** 通用排除：机场信息类节点 + 用户自定义过滤 */
 const EXCLUDE_COMMON = buildExcludeFilter(SETTINGS.INFO_FILTER, CUSTOM_FILTER);
-/** AI 组排除：在通用排除基础上再剔除香港 */
+/** AI 组排除：通用排除 + 香港节点 */
 const EXCLUDE_AI = buildExcludeFilter(
   SETTINGS.INFO_FILTER,
   CUSTOM_FILTER,
   HK_FILTER,
 );
 
-/** 仅在过滤器非空时写入字段，避免下发 `exclude-filter: ""` */
+/** 仅在过滤器非空时写入字段，避免下发空字符串 */
 const withExclude = (group: ProxyGroup, filter: string): ProxyGroup =>
   filter ? { ...group, "exclude-filter": filter } : group;
 
 /**
  * 为 include-all 组同时设置 filter（地区白名单）和 exclude-filter（信息节点黑名单）。
- * filter 确保只纳入某地区节点，exclude-filter 剔除信息类节点。
  */
 const withFilters = (
   group: ProxyGroup,
@@ -233,18 +198,16 @@ const withFilters = (
 };
 
 /**
- * include-all 组的空成员兜底（内核 v1.19.27+）。
- * 注意：empty-fallback 只接受 proxy 名，填策略组会被内核直接判错。
+ * include-all 组的空成员兜底（empty-fallback）。
+ * 过滤后空组显式回退至 DIRECT，避免 UI 显示含混的 COMPATIBLE。
  */
 const EMPTY_FALLBACK = { "empty-fallback": "DIRECT" };
 
-// ============================================================
-// 规则出口目标构建（基于 ruleOptionsEnable 动态映射）
-// ============================================================
+// --- 规则出口目标构建（基于 ruleOptionsEnable 动态映射） ---
 
 /**
  * 根据 ruleOptionsEnable 构建分流规则出口。
- * 当某个服务的开关为 false 时，该服务的流量回退到 main 组。
+ * 当某个服务的开关为 false 时，该服务的流量平滑回退到 main 组。
  */
 const buildRuleTargets = (): RuleTargets => ({
   adblock: ruleOptionsEnable.广告拦截 ? GROUPS.ADBLOCK : "REJECT",
@@ -258,13 +221,11 @@ const buildRuleTargets = (): RuleTargets => ({
   proxy: GROUPS.MAIN,
 });
 
-// ============================================================
-// 判断是否有节点来源
-// ============================================================
+// --- 节点来源判断 ---
 
 /**
- * FlClash/Bettbox 在调用脚本前会把缺失的 proxy-providers 补成 {}，
- * 所以必须判 key 数量而不是判字段是否存在。
+ * 订阅是否提供了可用节点来源。
+ * FlClash/Bettbox 在调用脚本前会将缺失的 proxy-providers 补成 {}，故必须判断 key 数量。
  */
 const hasProxySource = (cfg: ClashConfig): boolean => {
   const proxies = Array.isArray(cfg.proxies) ? cfg.proxies : [];
@@ -276,9 +237,7 @@ const hasProxySource = (cfg: ClashConfig): boolean => {
   return proxies.length > 0 || providerCount > 0;
 };
 
-// ============================================================
-// ProxyGroups —— 完整策略组（include-all 运行时纳入）
-// ============================================================
+// --- 策略组构建（完整策略组 + 地区分组 + 可视化开关） ---
 
 const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   const icon = (f: string) => SETTINGS.ICON_BASE + f;
@@ -605,9 +564,7 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   return groups;
 };
 
-// ============================================================
-// Main
-// ============================================================
+// --- 主入口 ---
 
 export function bettboxMain(config: ClashConfig): ClashConfig {
   config = config && typeof config === "object" ? config : {};

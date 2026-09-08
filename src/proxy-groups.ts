@@ -2,9 +2,14 @@ import { SETTINGS } from "./settings";
 import { uniq } from "./utils";
 import type { ProxyGroup, RegionGroup } from "./types";
 
-// ============================================================
-// 7. ProxyBuilder —— 策略组生成
-// ============================================================
+/**
+ * 完整版策略组构建器
+ * ------------------------------------------------------------------
+ * 为桌面端（Sparkle / Clash Verge Rev）构建完整的策略组体系：
+ * - 基础入口组：main / All / GLOBAL
+ * - 地区策略组：HK / TW / JP / SG 等（包含隐藏自动测速与手动选择）
+ * - 服务策略组：AI / Google / YouTube / Telegram / Steam / Apple / Microsoft
+ */
 
 export interface ProxyGroupsInput {
   allNames: string[];
@@ -42,14 +47,14 @@ export const buildProxyGroups = ({
       });
   };
 
-  // 按既定顺序取出「有节点」的地区
+  // 按既定顺序筛选有可用节点的地区
   const regionEntries = SETTINGS.REGION_ORDER.filter((r) =>
     activeRegionNameSet.has(r),
   );
   const hasOther = otherProxyNames.length > 0;
   const hasNodes = allNames.length > 0;
 
-  // ---- 主选择组 & 全量组 ----
+  // --- 主选择组与全局节点组 ---
   if (hasNodes) {
     const mainEntries = [
       "All",
@@ -66,15 +71,13 @@ export const buildProxyGroups = ({
       "Auto.png",
       SETTINGS.URL_TEST_EXTRA,
     );
-    // default-selected：把「默认选中自动测速组」写成显式语义。
-    // 此前依赖内核 selectedProxy() 找不到选中项时返回 proxies[0]，
-    // 一旦成员顺序调整默认项就会跟着漂。
+    // 显式声明 default-selected，保证默认选中自动测速组
     add("All", "select", ["URL Test - All", ...allNames], "Auto.png", {
       "default-selected": "URL Test - All",
     });
   }
 
-  // ---- 地区组（每地区一个 url-test + 一个 select） ----
+  // --- 地区分组（每个地区独立 url-test 与 select 组） ---
   regionEntries.forEach((rName) => {
     const region = activeRegionMap.get(rName);
     if (!region) return;
@@ -94,7 +97,7 @@ export const buildProxyGroups = ({
     );
   });
 
-  // ---- Other / info ----
+  // --- Other 兜底组与信息类节点组 ---
   if (hasOther) {
     add(
       "URL Test - Other",
@@ -113,19 +116,19 @@ export const buildProxyGroups = ({
   }
   if (infoNames.length) add("info", "select", infoNames, "Available.png");
 
-  // ---- 服务策略组（依赖节点存在） ----
+  // --- 业务分流策略组 ---
   if (hasNodes) {
-    // 代理优先型成员：main → All → 各地区 → Other
+    // 代理优先列表：main → All → 各地区 → Other
     const proxyFirst = [
       "main",
       "All",
       ...regionEntries,
       ...(hasOther ? ["Other"] : []),
     ];
-    // 需在本地/直连间可切换的服务：附加 DIRECT 选项
+    // 兼具代理与直连需求的服务：追加 DIRECT
     const withDirect = [...proxyFirst, "DIRECT"];
 
-    // AI：非香港优先 + 自动测速子组
+    // AI 纯净池（排除香港节点）
     const aiRegions = regionEntries.filter((r) => r !== "HK");
     add(
       "URL Test - AI",
@@ -142,17 +145,13 @@ export const buildProxyGroups = ({
       { "default-selected": "URL Test - AI" },
     );
 
-    // Google / YouTube（YouTube 默认复用 Google 出口）
-    // default-selected 显式锁定到 "Google"：YouTube 与 Google 大量共享
-    // 域名与账号态（youtubei.googleapis.com、登录/推荐/历史同步），两组
-    // 落到不同出口 IP 会触发 Google 侧的会话风控。想单独给 YouTube 换线
-    // 路时仍可在 App 内手动切换，只是默认不再分裂。
+    // Google 与 YouTube（YouTube 默认跟随 Google 出口，避免多出口 IP 触发风控）
     add("Google", "select", proxyFirst, "Google_Search.png");
     add("YouTube", "select", ["Google", ...proxyFirst], "YouTube.png", {
       "default-selected": "Google",
     });
 
-    // Telegram（新加坡优先，附 fallback 自愈）
+    // Telegram（新加坡节点优先，附 fallback 自愈机制）
     const hasSG = activeRegionNameSet.has("SG");
     add(
       "Telegram - Fallback",
@@ -169,13 +168,12 @@ export const buildProxyGroups = ({
       { "default-selected": "Telegram - Fallback" },
     );
 
-    // Steam / Apple / Microsoft：默认走代理，可选 DIRECT
+    // Steam / Apple / Microsoft（默认走代理，可一键切直连）
     add("Steam", "select", withDirect, "Steam.png");
     add("Apple", "select", withDirect, "Apple.png");
     add("Microsoft", "select", withDirect, "Microsoft.png");
   } else {
-    // 零节点回退：规则出口引用的业务组必须始终存在（对齐极简版
-    // 「全部」组的处理），否则空订阅/拉取失败时内核 -t 直接报错
+    // 零节点回退：业务组回退 DIRECT 确保配置合法性
     const fallbackGroups: Array<[string, string]> = [
       ["main", "Available.png"],
       ["AI", "ChatGPT.png"],
@@ -191,7 +189,7 @@ export const buildProxyGroups = ({
     );
   }
 
-  // ---- GLOBAL 全局入口（汇总所有组） ----
+  // --- GLOBAL 全局汇总组 ---
   add(
     "GLOBAL",
     "select",

@@ -13,9 +13,9 @@ import { resolve } from "node:path";
  *  - 顶层作用域必须存在可调用的 `main` → 用 IIFE + footer 桥接
  *  - boa / QuickJS 均支持 90%+ 最新 ES 规范，target es2020 安全
  *
- * 三产物：默认 mode 构建完整版，`--mode simple` 极简版，
- * `--mode flclash` 手机端版。（Vite 库模式的 IIFE 不支持多 entry，
- * 故用 mode 区分、分次构建。）
+ * 四产物：默认 mode 构建完整版，`--mode simple` 极简版，
+ * `--mode flclash` 手机极简版，`--mode bettbox` Bettbox 专属版。
+ * （Vite 库模式的 IIFE 不支持多 entry，故用 mode 区分、分次构建。）
  */
 
 const FULL = {
