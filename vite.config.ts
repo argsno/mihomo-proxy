@@ -63,7 +63,8 @@ const BETTBOX = {
   entry: "src/bettbox.ts",
   name: "__mihomoBettbox",
   fileName: "bettbox-flclash.js",
-  banner: `/**
+  banner: `const Compatible_With_Bettbox = { ruleOptionsEnable: true };
+/**
  * bettbox-flclash — Bettbox / FlClash 系列专属覆写脚本 v3.0
  * ------------------------------------------------------------------
  * 面向 Bettbox 与 FlClash 系列客户端的完整分流覆写脚本。
@@ -92,7 +93,33 @@ const BETTBOX = {
  * 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-flclash.js
  * 客户端：https://github.com/appshubcc/Bettbox | https://github.com/chen08209/FlClash
  */
-const Compatible_With_Bettbox = { ruleOptionsEnable: true };`,
+var ruleOptionsEnable = {
+  Google: true,
+  YouTube: true,
+  AI: true,
+  Telegram: true,
+  Steam: true,
+  Apple: true,
+  Microsoft: true,
+  Spotify: true,
+  广告拦截: true,
+  地区分组: true,
+  屏蔽QUIC: true,
+};
+
+var serviceConfigs = [
+  { name: "Google", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Google_Search.png" },
+  { name: "YouTube", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/YouTube.png" },
+  { name: "AI", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/ChatGPT.png" },
+  { name: "Telegram", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Telegram.png" },
+  { name: "Steam", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Steam.png" },
+  { name: "Apple", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Apple.png" },
+  { name: "Microsoft", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Microsoft.png" },
+  { name: "Spotify", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Spotify.png" },
+  { name: "广告拦截", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/AdBlack.png" },
+  { name: "地区分组", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Global.png" },
+  { name: "屏蔽QUIC", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Reject.png" },
+];`,
 };
 
 const FLCLASH = {

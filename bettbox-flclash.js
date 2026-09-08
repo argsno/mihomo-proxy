@@ -1,37 +1,93 @@
+const Compatible_With_Bettbox = { ruleOptionsEnable: true };
 /**
-* flclash-mobile — FlClash（手机端）覆写脚本 v3.0
+* bettbox-flclash — Bettbox / FlClash 系列专属覆写脚本 v3.0
 * ------------------------------------------------------------------
-* 与 simple-mihomo 同样的三个策略组、同一套业务分流 / DNS 防泄露 /
-* Sniffer 源码，但节点改由内核 include-all + 正则过滤在运行时纳入：
-* 订阅更新、机场加减节点后无需重新应用脚本，proxy-providers 型订阅
-* 也能正确分组，生成的配置不含几百行节点名，手机上加载更快。
+* 面向 Bettbox 与 FlClash 系列客户端的完整分流覆写脚本。
+* 集成 Compatible_With_Bettbox 可视化开关适配、include-all 运行时
+* 节点纳入、完整分流策略组（Google/YouTube/AI/Telegram/Steam/Apple/
+* Microsoft）、以及按地区自动分组（HK/TW/JP/SG/KR/US/EU/AU/AS）。
 *
-*   全部     —— 全部节点（自动测速打头，默认自动选优）
-*   AI       —— 排除香港的纯净节点池（OpenAI/Claude 常封锁 HK 出口）
-*   广告拦截 —— REJECT（默认拦截）/ DIRECT / 全部 三选一
+* ── Bettbox 可视化开关 ───────────────────────────────────────────
+* 本脚本首行的 Compatible_With_Bettbox 声明会被 Bettbox（v1.18.8+）
+* 自动识别，在客户端 UI 中渲染可视化配置面板，用户可直接通过开关
+* 控制各分流策略组和地区分组的启用/禁用。
 *
 * ── 用法 ──────────────────────────────────────────────────────────
 * 设置 → 高级设置 → 脚本 → 添加 →（右上角可远程下载本脚本链接）→
 * 保存；再到 配置 → 对应订阅 → 覆写 → 模式选「脚本」→ 勾选本脚本。
 *
-* ── 必须在 App 内核对的设置（脚本无法覆盖，会被 App 强制改写）──────
+* ── 必须在 App 内正确的设置（脚本无法覆盖，会被 App 强制改写）────
 *  1. 设置 → 网络 →「覆写 DNS」保持【关闭】
-*     （打开会用 App 默认 DNS 整块替换本脚本的防泄露 DNS 架构）
 *  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
-*     （打开会向 nameserver 注入 system://，直接构成 DNS 泄露）
 *  3. 出站模式选「规则」；TUN 栈选 mixed；
-*     「查找进程」建议设为 off（手机上无进程规则，开启徒增开销）
-*  4. 上述之外，log-level / ipv6 / 各端口 / tcp-concurrent /
-*     unified-delay / keep-alive-interval / 记住选择 等，
-*     同样由 App 设置决定，脚本内的对应值不会生效。
+*     「查找进程」建议设为 off
 *
 * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
 *
 * 仓库地址：https://github.com/wchiway/mihomo-proxy
-* 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/flclash-mobile.js
-* 客户端：https://github.com/chen08209/FlClash
+* 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-flclash.js
+* 客户端：https://github.com/appshubcc/Bettbox | https://github.com/chen08209/FlClash
 */
-var __mihomoFlClash = (function(exports) {
+var ruleOptionsEnable = {
+	Google: true,
+	YouTube: true,
+	AI: true,
+	Telegram: true,
+	Steam: true,
+	Apple: true,
+	Microsoft: true,
+	Spotify: true,
+	广告拦截: true,
+	地区分组: true,
+	屏蔽QUIC: true
+};
+var serviceConfigs = [
+	{
+		name: "Google",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Google_Search.png"
+	},
+	{
+		name: "YouTube",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/YouTube.png"
+	},
+	{
+		name: "AI",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/ChatGPT.png"
+	},
+	{
+		name: "Telegram",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Telegram.png"
+	},
+	{
+		name: "Steam",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Steam.png"
+	},
+	{
+		name: "Apple",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Apple.png"
+	},
+	{
+		name: "Microsoft",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Microsoft.png"
+	},
+	{
+		name: "Spotify",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Spotify.png"
+	},
+	{
+		name: "广告拦截",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/AdBlack.png"
+	},
+	{
+		name: "地区分组",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Global.png"
+	},
+	{
+		name: "屏蔽QUIC",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Reject.png"
+	}
+];
+var __mihomoBettbox = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region src/user-config.ts
 	/**
@@ -570,43 +626,125 @@ var __mihomoFlClash = (function(exports) {
 		});
 	};
 	//#endregion
-	//#region src/flclash-main.ts
+	//#region src/bettbox-main.ts
+	/** 默认开关配置 */
+	var DEFAULT_RULE_OPTIONS = {
+		Google: true,
+		YouTube: true,
+		AI: true,
+		Telegram: true,
+		Steam: true,
+		Apple: true,
+		Microsoft: true,
+		Spotify: true,
+		广告拦截: true,
+		地区分组: true,
+		屏蔽QUIC: true
+	};
 	/**
-	* FlClash 手机端极简版覆写脚本
-	* ------------------------------------------------------------------
-	* 核心设计：
-	* 1. 采用三个极简策略组（全部 / AI / 广告拦截）
-	* 2. 节点纳入方式采用内核 include-all + exclude-filter，订阅更新无需重新执行脚本
-	* 3. 完美兼容 proxy-providers 与普通 proxies 订阅
-	* 4. 适配 QuickJS 单参数 main(config) 运行时
+	* 动态获取 Bettbox 规则开关配置。
+	* 优先读取宿主环境中注入的词法/全局作用域 ruleOptionsEnable（经用户自定义设置覆盖后的值），
+	* 未设置的项回退至 DEFAULT_RULE_OPTIONS。
 	*/
-	/** 三个策略组的名称（规则出口统一引用这里，避免魔法字符串） */
+	function getRuleOptions() {
+		let hostOptions;
+		try {
+			if (typeof ruleOptionsEnable !== "undefined" && ruleOptionsEnable && typeof ruleOptionsEnable === "object") hostOptions = ruleOptionsEnable;
+		} catch {}
+		if (!hostOptions && typeof globalThis !== "undefined") {
+			const g = globalThis;
+			if (g.ruleOptionsEnable && typeof g.ruleOptionsEnable === "object") hostOptions = g.ruleOptionsEnable;
+		}
+		return {
+			...DEFAULT_RULE_OPTIONS,
+			...hostOptions || {}
+		};
+	}
 	var GROUPS = {
-		ALL: "全部",
+		MAIN: "main",
+		ALL: "All",
 		AI: "AI",
-		ADBLOCK: "广告拦截"
+		GOOGLE: "Google",
+		YOUTUBE: "YouTube",
+		TELEGRAM: "Telegram",
+		STEAM: "Steam",
+		APPLE: "Apple",
+		MICROSOFT: "Microsoft",
+		SPOTIFY: "Spotify",
+		ADBLOCK: "广告拦截",
+		GLOBAL: "GLOBAL",
+		OTHER: "Other"
 	};
-	/** 两个隐藏的自动测速组（供上面的 select 组引用） */
-	var AUTO = {
-		ALL: "自动测速",
-		AI: "AI 自动测速"
-	};
-	/** 香港节点识别（AI 组需剔除，OpenAI/Claude 等常封锁 HK 出口） */
+	/** 测速组名前缀 */
+	var URL_TEST_PREFIX = "URL Test - ";
+	/**
+	* 地区定义与 filter 正则
+	* 使用 (?i)(?:pattern1|pattern2) 语法统一包裹。
+	*/
+	var REGION_DEFS = [
+		{
+			name: "HK",
+			filter: "(?i)(?:香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰)",
+			icon: "Hong_Kong.png"
+		},
+		{
+			name: "TW",
+			filter: "(?i)(?:台湾|台北|新北|TW|TWN|TAIWAN|TAIPEI|🇹🇼)",
+			icon: "Taiwan.png"
+		},
+		{
+			name: "JP",
+			filter: "(?i)(?:日本|东京|大阪|JP|JPN|JAPAN|TOKYO|OSAKA|🇯🇵)",
+			icon: "Japan.png"
+		},
+		{
+			name: "SG",
+			filter: "(?i)(?:新加坡|狮城|SG|SGP|SINGAPORE|🇸🇬)",
+			icon: "Singapore.png"
+		},
+		{
+			name: "KR",
+			filter: "(?i)(?:韩国|首尔|KR|KOR|KOREA|SEOUL|🇰🇷)",
+			icon: "Korea.png"
+		},
+		{
+			name: "US",
+			filter: "(?i)(?:美国|纽约|旧金山|洛杉矶|西雅图|芝加哥|US|USA|NEW YORK|SAN FRANCISCO|LOS ANGELES|SEATTLE|CHICAGO|🇺🇸)",
+			icon: "United_States.png"
+		},
+		{
+			name: "EU",
+			filter: "(?i)(?:欧洲|德国|法国|英国|荷兰|俄罗斯|意大利|西班牙|瑞典|瑞士|波兰|芬兰|土耳其|爱尔兰|奥地利|法兰克福|伦敦|EU|DE|FR|UK|GB|NL|RU|IT|ES|SE|CH|PL|FI|TR|IE|AT|GERMANY|FRANCE|LONDON|FRANKFURT|🇪🇺|🇩🇪|🇫🇷|🇬🇧|🇳🇱|🇷🇺|🇮🇹|🇪🇸|🇸🇪|🇨🇭|🇵🇱|🇫🇮|🇹🇷|🇮🇪|🇦🇹|🇧🇪)",
+			icon: "European_Union.png"
+		},
+		{
+			name: "AU",
+			filter: "(?i)(?:澳大利亚|澳洲|悉尼|墨尔本|AU|AUS|AUSTRALIA|SYDNEY|MELBOURNE|🇦🇺)",
+			icon: "Australia.png"
+		},
+		{
+			name: "AS",
+			filter: "(?i)(?:越南|泰国|马来西亚|印尼|菲律宾|印度|VN|TH|MY|ID|PH|IN|VIETNAM|THAILAND|MALAYSIA|INDONESIA|PHILIPPINES|MANILA|🇻🇳|🇹🇭|🇲🇾|🇮🇩|🇵🇭|🇮🇳)",
+			icon: "Asia_Map.png"
+		}
+	];
+	/** 地区展示顺序（与 settings.ts REGION_ORDER 一致） */
+	var REGION_ORDER = [
+		"HK",
+		"TW",
+		"JP",
+		"SG",
+		"KR",
+		"US",
+		"EU",
+		"AU",
+		"AS"
+	];
+	/** 香港节点识别（AI 组需剔除香港出口） */
 	var HK_FILTER = /香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰/i;
-	var STATIC_RULES = buildStaticRules({
-		adblock: GROUPS.ADBLOCK,
-		ai: GROUPS.AI,
-		google: GROUPS.ALL,
-		youtube: GROUPS.ALL,
-		telegram: GROUPS.ALL,
-		steam: GROUPS.ALL,
-		apple: GROUPS.ALL,
-		microsoft: GROUPS.ALL,
-		proxy: GROUPS.ALL
-	});
 	/**
 	* 取正则源码，空正则返回 ""。
-	* 空 RegExp 的 source 是 "(?:)"，直接拼进过滤器会匹配空串导致所有节点被排除。
+	* 空 RegExp 的 source 是 "(?:)"，直接拼入过滤器会匹配空串导致所有节点被排除。
 	*/
 	var filterSource = (re) => {
 		const src = re && re.source ? String(re.source) : "";
@@ -630,16 +768,39 @@ var __mihomoFlClash = (function(exports) {
 		"exclude-filter": filter
 	} : group;
 	/**
+	* 为 include-all 组同时设置 filter（地区白名单）和 exclude-filter（信息节点黑名单）。
+	*/
+	var withFilters = (group, includeFilter, excludeFilter) => {
+		const result = { ...group };
+		if (includeFilter) result.filter = includeFilter;
+		if (excludeFilter) result["exclude-filter"] = excludeFilter;
+		return result;
+	};
+	/**
 	* include-all 组的空成员兜底（empty-fallback）。
 	* 过滤后空组显式回退至 DIRECT，避免 UI 显示含混的 COMPATIBLE。
 	*/
 	var EMPTY_FALLBACK = { "empty-fallback": "DIRECT" };
 	/**
-	* 订阅是否提供了节点来源。
-	* proxies 与 proxy-providers 任一非空即可 —— provider 为 http 类型时
-	* 配置校验阶段尚未下载，节点数为 0 属正常，不能据此判空。
-	* 注：FlClash 在调用脚本前会把缺失的 proxy-providers 补成 {}，
-	* 所以这里必须判 key 数量而不是判是否存在。
+	* 根据 BettboxRuleOptions 构建分流规则出口。
+	* 当某个服务的开关为 false 时，该服务的流量平滑回退到 main 组。
+	*/
+	var buildRuleTargets = (options) => ({
+		adblock: options.广告拦截 ? GROUPS.ADBLOCK : "REJECT",
+		ai: options.AI ? GROUPS.AI : GROUPS.MAIN,
+		google: options.Google ? GROUPS.GOOGLE : GROUPS.MAIN,
+		youtube: options.YouTube ? GROUPS.YOUTUBE : GROUPS.MAIN,
+		telegram: options.Telegram ? GROUPS.TELEGRAM : GROUPS.MAIN,
+		steam: options.Steam ? GROUPS.STEAM : GROUPS.MAIN,
+		apple: options.Apple ? GROUPS.APPLE : GROUPS.MAIN,
+		microsoft: options.Microsoft ? GROUPS.MICROSOFT : GROUPS.MAIN,
+		spotify: options.Spotify ? GROUPS.SPOTIFY : GROUPS.MAIN,
+		proxy: GROUPS.MAIN,
+		blockQuic: options.屏蔽QUIC
+	});
+	/**
+	* 订阅是否提供了可用节点来源。
+	* FlClash/Bettbox 在调用脚本前会将缺失的 proxy-providers 补成 {}，故必须判断 key 数量。
 	*/
 	var hasProxySource = (cfg) => {
 		const proxies = Array.isArray(cfg.proxies) ? cfg.proxies : [];
@@ -647,105 +808,300 @@ var __mihomoFlClash = (function(exports) {
 		const providerCount = providers && typeof providers === "object" ? Object.keys(providers).length : 0;
 		return proxies.length > 0 || providerCount > 0;
 	};
-	/**
-	* 构建策略组。
-	*
-	* include-all 的内核语义（adapter/outboundgroup/parser.go）：
-	*   include-all = include-all-proxies + include-all-providers，
-	*   前者把 AllProxies 追加到 proxies 之后，后者把全部 proxy-providers
-	*   填进 use。AllProxies 只含订阅节点，不含 DIRECT / REJECT / 策略组名，
-	*   所以自动测速组不会把 DIRECT 当成"最快节点"选中。
-	*   过滤在 GroupBase.GetProxies 里做，对 proxies 与 providers 均生效。
-	*/
-	var buildMobileProxyGroups = (hasNodes) => {
+	var buildBettboxProxyGroups = (hasNodes, options) => {
 		const icon = (f) => SETTINGS.ICON_BASE + f;
-		if (!hasNodes) return [
-			{
+		const enableRegion = options.地区分组;
+		if (!hasNodes) {
+			const fallback = [{
+				name: GROUPS.MAIN,
+				type: "select",
+				proxies: ["DIRECT"],
+				icon: icon("Available.png")
+			}, {
 				name: GROUPS.ALL,
 				type: "select",
 				proxies: ["DIRECT"],
-				icon: icon("Global.png")
-			},
-			{
+				icon: icon("Auto.png")
+			}];
+			if (options.AI) fallback.push({
 				name: GROUPS.AI,
 				type: "select",
-				proxies: [GROUPS.ALL],
+				proxies: [GROUPS.MAIN],
 				icon: icon("ChatGPT.png")
-			},
-			{
+			});
+			if (options.Google) fallback.push({
+				name: GROUPS.GOOGLE,
+				type: "select",
+				proxies: [GROUPS.MAIN],
+				icon: icon("Google_Search.png")
+			});
+			if (options.YouTube) fallback.push({
+				name: GROUPS.YOUTUBE,
+				type: "select",
+				proxies: [GROUPS.MAIN],
+				icon: icon("YouTube.png")
+			});
+			if (options.Telegram) fallback.push({
+				name: GROUPS.TELEGRAM,
+				type: "select",
+				proxies: [GROUPS.MAIN],
+				icon: icon("Telegram.png")
+			});
+			if (options.Steam) fallback.push({
+				name: GROUPS.STEAM,
+				type: "select",
+				proxies: [GROUPS.MAIN, "DIRECT"],
+				icon: icon("Steam.png")
+			});
+			if (options.Apple) fallback.push({
+				name: GROUPS.APPLE,
+				type: "select",
+				proxies: [GROUPS.MAIN, "DIRECT"],
+				icon: icon("Apple.png")
+			});
+			if (options.Microsoft) fallback.push({
+				name: GROUPS.MICROSOFT,
+				type: "select",
+				proxies: [GROUPS.MAIN, "DIRECT"],
+				icon: icon("Microsoft.png")
+			});
+			if (options.Spotify) fallback.push({
+				name: GROUPS.SPOTIFY,
+				type: "select",
+				proxies: [GROUPS.MAIN],
+				icon: icon("Spotify.png")
+			});
+			if (options.广告拦截) fallback.push({
 				name: GROUPS.ADBLOCK,
 				type: "select",
 				proxies: [
 					"REJECT",
 					"DIRECT",
-					GROUPS.ALL
+					GROUPS.MAIN
 				],
 				icon: icon("AdBlack.png")
-			}
-		];
-		return [
-			withExclude({
-				name: AUTO.ALL,
+			});
+			fallback.push({
+				name: GROUPS.GLOBAL,
+				type: "select",
+				proxies: [GROUPS.MAIN, "DIRECT"],
+				icon: icon("Global.png")
+			});
+			return fallback;
+		}
+		const groups = [];
+		groups.push(withExclude({
+			name: `${URL_TEST_PREFIX}All`,
+			type: "url-test",
+			proxies: [],
+			"include-all": true,
+			icon: icon("Auto.png"),
+			...SETTINGS.MOBILE_URL_TEST_EXTRA,
+			...EMPTY_FALLBACK
+		}, EXCLUDE_COMMON));
+		groups.push(withExclude({
+			name: GROUPS.ALL,
+			type: "select",
+			proxies: [`${URL_TEST_PREFIX}All`],
+			"include-all": true,
+			"default-selected": `${URL_TEST_PREFIX}All`,
+			icon: icon("Auto.png")
+		}, EXCLUDE_COMMON));
+		const regionNames = [];
+		if (enableRegion) for (const rName of REGION_ORDER) {
+			const def = REGION_DEFS.find((r) => r.name === rName);
+			if (!def) continue;
+			groups.push(withFilters({
+				name: `${URL_TEST_PREFIX}${def.name}`,
 				type: "url-test",
 				proxies: [],
 				"include-all": true,
-				icon: icon("Auto.png"),
+				icon: icon(def.icon),
 				...SETTINGS.MOBILE_URL_TEST_EXTRA,
 				...EMPTY_FALLBACK
-			}, EXCLUDE_COMMON),
-			withExclude({
-				name: GROUPS.ALL,
+			}, def.filter, EXCLUDE_COMMON));
+			groups.push(withFilters({
+				name: def.name,
 				type: "select",
-				proxies: [AUTO.ALL],
+				proxies: [`${URL_TEST_PREFIX}${def.name}`],
 				"include-all": true,
-				"default-selected": AUTO.ALL,
-				icon: icon("Global.png")
-			}, EXCLUDE_COMMON),
-			withExclude({
-				name: AUTO.AI,
+				"default-selected": `${URL_TEST_PREFIX}${def.name}`,
+				icon: icon(def.icon)
+			}, def.filter, EXCLUDE_COMMON));
+			regionNames.push(def.name);
+		}
+		if (enableRegion) {
+			const allRegionPatterns = REGION_DEFS.map((r) => r.filter.replace(/^\(\?i\)\(\?:/, "").replace(/\)$/, "")).join("|");
+			const otherExclude = EXCLUDE_COMMON ? `(?i)(?:${EXCLUDE_COMMON.replace(/^\(\?i\)\(\?:/, "").replace(/\)$/, "")}|${allRegionPatterns})` : `(?i)(?:${allRegionPatterns})`;
+			groups.push(withExclude({
+				name: `${URL_TEST_PREFIX}Other`,
+				type: "url-test",
+				proxies: [],
+				"include-all": true,
+				icon: icon("Available.png"),
+				...SETTINGS.MOBILE_URL_TEST_EXTRA,
+				...EMPTY_FALLBACK
+			}, otherExclude));
+			groups.push(withExclude({
+				name: GROUPS.OTHER,
+				type: "select",
+				proxies: [`${URL_TEST_PREFIX}Other`],
+				"include-all": true,
+				"default-selected": `${URL_TEST_PREFIX}Other`,
+				icon: icon("Available.png")
+			}, otherExclude));
+		}
+		const mainProxies = [
+			GROUPS.ALL,
+			...regionNames,
+			...enableRegion ? [GROUPS.OTHER] : []
+		];
+		groups.push({
+			name: GROUPS.MAIN,
+			type: "select",
+			proxies: mainProxies,
+			"default-selected": GROUPS.ALL,
+			icon: icon("Available.png")
+		});
+		/** 服务组的 proxies 列表：main → 地区 → Other → DIRECT */
+		const serviceProxies = [
+			GROUPS.MAIN,
+			GROUPS.ALL,
+			...regionNames,
+			...enableRegion ? [GROUPS.OTHER] : []
+		];
+		const serviceWithDirect = [...serviceProxies, "DIRECT"];
+		if (options.AI) {
+			groups.push(withExclude({
+				name: `${URL_TEST_PREFIX}AI`,
 				type: "url-test",
 				proxies: [],
 				"include-all": true,
 				icon: icon("ChatGPT.png"),
 				...SETTINGS.MOBILE_URL_TEST_EXTRA,
 				...EMPTY_FALLBACK
-			}, EXCLUDE_AI),
-			withExclude({
+			}, EXCLUDE_AI));
+			const aiRegions = regionNames.filter((r) => r !== "HK");
+			groups.push({
 				name: GROUPS.AI,
 				type: "select",
-				proxies: [AUTO.AI],
-				"include-all": true,
-				"default-selected": AUTO.AI,
-				icon: icon("ChatGPT.png")
-			}, EXCLUDE_AI),
-			{
-				name: GROUPS.ADBLOCK,
-				type: "select",
 				proxies: [
-					"REJECT",
-					"DIRECT",
-					GROUPS.ALL
+					`${URL_TEST_PREFIX}AI`,
+					...aiRegions,
+					GROUPS.MAIN,
+					...enableRegion ? [GROUPS.OTHER] : []
 				],
-				icon: icon("AdBlack.png")
-			}
-		];
+				"default-selected": `${URL_TEST_PREFIX}AI`,
+				icon: icon("ChatGPT.png")
+			});
+		}
+		if (options.Google) groups.push({
+			name: GROUPS.GOOGLE,
+			type: "select",
+			proxies: serviceProxies,
+			icon: icon("Google_Search.png")
+		});
+		if (options.YouTube) {
+			const ytProxies = options.Google ? [GROUPS.GOOGLE, ...serviceProxies] : serviceProxies;
+			groups.push({
+				name: GROUPS.YOUTUBE,
+				type: "select",
+				proxies: ytProxies,
+				"default-selected": options.Google ? GROUPS.GOOGLE : GROUPS.MAIN,
+				icon: icon("YouTube.png")
+			});
+		}
+		if (options.Telegram) {
+			const hasSG = regionNames.includes("SG");
+			if (hasSG) groups.push({
+				name: "Telegram - Fallback",
+				type: "fallback",
+				proxies: ["SG", GROUPS.MAIN],
+				icon: icon("Telegram.png"),
+				...SETTINGS.MOBILE_URL_TEST_EXTRA
+			});
+			groups.push({
+				name: GROUPS.TELEGRAM,
+				type: "select",
+				proxies: [...hasSG ? ["Telegram - Fallback", "SG"] : [], ...serviceProxies],
+				"default-selected": hasSG ? "Telegram - Fallback" : GROUPS.MAIN,
+				icon: icon("Telegram.png")
+			});
+		}
+		if (options.Steam) groups.push({
+			name: GROUPS.STEAM,
+			type: "select",
+			proxies: serviceWithDirect,
+			icon: icon("Steam.png")
+		});
+		if (options.Apple) groups.push({
+			name: GROUPS.APPLE,
+			type: "select",
+			proxies: serviceWithDirect,
+			icon: icon("Apple.png")
+		});
+		if (options.Microsoft) groups.push({
+			name: GROUPS.MICROSOFT,
+			type: "select",
+			proxies: serviceWithDirect,
+			icon: icon("Microsoft.png")
+		});
+		if (options.Spotify) groups.push({
+			name: GROUPS.SPOTIFY,
+			type: "select",
+			proxies: serviceProxies,
+			icon: icon("Spotify.png")
+		});
+		if (options.广告拦截) groups.push({
+			name: GROUPS.ADBLOCK,
+			type: "select",
+			proxies: [
+				"REJECT",
+				"DIRECT",
+				GROUPS.MAIN
+			],
+			icon: icon("AdBlack.png")
+		});
+		groups.push({
+			name: GROUPS.GLOBAL,
+			type: "select",
+			proxies: [
+				GROUPS.MAIN,
+				GROUPS.ALL,
+				...options.AI ? [GROUPS.AI] : [],
+				...options.Google ? [GROUPS.GOOGLE] : [],
+				...options.YouTube ? [GROUPS.YOUTUBE] : [],
+				...options.Telegram ? [GROUPS.TELEGRAM] : [],
+				...options.Steam ? [GROUPS.STEAM] : [],
+				...options.Apple ? [GROUPS.APPLE] : [],
+				...options.Microsoft ? [GROUPS.MICROSOFT] : [],
+				...options.Spotify ? [GROUPS.SPOTIFY] : [],
+				...regionNames,
+				...enableRegion ? [GROUPS.OTHER] : [],
+				"DIRECT"
+			],
+			icon: icon("Global.png")
+		});
+		return groups;
 	};
-	function flclashMain(config) {
+	function bettboxMain(config) {
 		config = config && typeof config === "object" ? config : {};
+		const options = getRuleOptions();
 		const originalProxies = Array.isArray(config.proxies) ? config.proxies : [];
 		const existingRules = Array.isArray(config.rules) ? config.rules : [];
 		delete config["geodata-mode"];
 		delete config["geo-auto-update"];
 		delete config["geo-update-interval"];
 		delete config["geox-url"];
+		const ruleTargets = buildRuleTargets(options);
 		config["rule-providers"] = {
 			...config["rule-providers"] || {},
 			...buildRuleProviders()
 		};
-		config.rules = mergeRules(STATIC_RULES, pickDirectRules(existingRules));
+		config.rules = mergeRules(buildStaticRules(ruleTargets), pickDirectRules(existingRules));
 		makeProxyNamesUnique(originalProxies);
 		if (originalProxies.length) config.proxies = originalProxies;
-		config["proxy-groups"] = buildMobileProxyGroups(hasProxySource(config));
+		config["proxy-groups"] = buildBettboxProxyGroups(hasProxySource(config), options);
 		applyRuntime(config);
 		applySniffer(config);
 		applyTun(config);
@@ -753,11 +1109,11 @@ var __mihomoFlClash = (function(exports) {
 		return config;
 	}
 	//#endregion
-	exports.main = flclashMain;
+	exports.main = bettboxMain;
 	return exports;
 })({});
 // 宿主入口桥接：脚本被求值后直接调用顶层 main
 // （Sparkle / Clash Verge Rev 传 (config, profileName)，FlClash 只传 config）
 function main(config, profileName) {
-	return __mihomoFlClash.main(config, profileName);
+	return __mihomoBettbox.main(config, profileName);
 }

@@ -23,11 +23,24 @@ import type { ClashConfig, Proxy, ProxyGroup } from "./types";
  */
 
 /**
- * Bettbox 可视化开关配置对象
- * Bettbox 客户端会读取此处键值并在 UI 中自动渲染图形化开关。
+ * Bettbox 可视化开关选项类型定义
  */
-const ruleOptionsEnable: Record<string, boolean> = {
-  // 分流策略组开关
+export interface BettboxRuleOptions {
+  Google: boolean;
+  YouTube: boolean;
+  AI: boolean;
+  Telegram: boolean;
+  Steam: boolean;
+  Apple: boolean;
+  Microsoft: boolean;
+  Spotify: boolean;
+  广告拦截: boolean;
+  地区分组: boolean;
+  屏蔽QUIC: boolean;
+}
+
+/** 默认开关配置 */
+export const DEFAULT_RULE_OPTIONS: BettboxRuleOptions = {
   Google: true,
   YouTube: true,
   AI: true,
@@ -37,11 +50,42 @@ const ruleOptionsEnable: Record<string, boolean> = {
   Microsoft: true,
   Spotify: true,
   广告拦截: true,
-
-  // 节点与网络行为管理
   地区分组: true,
   屏蔽QUIC: true,
 };
+
+/** 宿主/全局作用域中声明的 ruleOptionsEnable（由 Bettbox 注入或用户修改） */
+declare const ruleOptionsEnable: Record<string, boolean> | undefined;
+
+/**
+ * 动态获取 Bettbox 规则开关配置。
+ * 优先读取宿主环境中注入的词法/全局作用域 ruleOptionsEnable（经用户自定义设置覆盖后的值），
+ * 未设置的项回退至 DEFAULT_RULE_OPTIONS。
+ */
+export function getRuleOptions(): BettboxRuleOptions {
+  let hostOptions: Record<string, boolean> | undefined;
+  try {
+    if (
+      typeof ruleOptionsEnable !== "undefined" &&
+      ruleOptionsEnable &&
+      typeof ruleOptionsEnable === "object"
+    ) {
+      hostOptions = ruleOptionsEnable;
+    }
+  } catch {
+    // 忽略未定义错误
+  }
+  if (!hostOptions && typeof globalThis !== "undefined") {
+    const g = globalThis as Record<string, unknown>;
+    if (g.ruleOptionsEnable && typeof g.ruleOptionsEnable === "object") {
+      hostOptions = g.ruleOptionsEnable as Record<string, boolean>;
+    }
+  }
+  return {
+    ...DEFAULT_RULE_OPTIONS,
+    ...(hostOptions || {}),
+  };
+}
 
 // --- 策略组名称定义 ---
 
@@ -206,19 +250,21 @@ const EMPTY_FALLBACK = { "empty-fallback": "DIRECT" };
 // --- 规则出口目标构建（基于 ruleOptionsEnable 动态映射） ---
 
 /**
- * 根据 ruleOptionsEnable 构建分流规则出口。
+ * 根据 BettboxRuleOptions 构建分流规则出口。
  * 当某个服务的开关为 false 时，该服务的流量平滑回退到 main 组。
  */
-const buildRuleTargets = (): RuleTargets => ({
-  adblock: ruleOptionsEnable.广告拦截 ? GROUPS.ADBLOCK : "REJECT",
-  ai: ruleOptionsEnable.AI ? GROUPS.AI : GROUPS.MAIN,
-  google: ruleOptionsEnable.Google ? GROUPS.GOOGLE : GROUPS.MAIN,
-  youtube: ruleOptionsEnable.YouTube ? GROUPS.YOUTUBE : GROUPS.MAIN,
-  telegram: ruleOptionsEnable.Telegram ? GROUPS.TELEGRAM : GROUPS.MAIN,
-  steam: ruleOptionsEnable.Steam ? GROUPS.STEAM : GROUPS.MAIN,
-  apple: ruleOptionsEnable.Apple ? GROUPS.APPLE : GROUPS.MAIN,
-  microsoft: ruleOptionsEnable.Microsoft ? GROUPS.MICROSOFT : GROUPS.MAIN,
+const buildRuleTargets = (options: BettboxRuleOptions): RuleTargets => ({
+  adblock: options.广告拦截 ? GROUPS.ADBLOCK : "REJECT",
+  ai: options.AI ? GROUPS.AI : GROUPS.MAIN,
+  google: options.Google ? GROUPS.GOOGLE : GROUPS.MAIN,
+  youtube: options.YouTube ? GROUPS.YOUTUBE : GROUPS.MAIN,
+  telegram: options.Telegram ? GROUPS.TELEGRAM : GROUPS.MAIN,
+  steam: options.Steam ? GROUPS.STEAM : GROUPS.MAIN,
+  apple: options.Apple ? GROUPS.APPLE : GROUPS.MAIN,
+  microsoft: options.Microsoft ? GROUPS.MICROSOFT : GROUPS.MAIN,
+  spotify: options.Spotify ? GROUPS.SPOTIFY : GROUPS.MAIN,
   proxy: GROUPS.MAIN,
+  blockQuic: options.屏蔽QUIC,
 });
 
 // --- 节点来源判断 ---
@@ -239,9 +285,12 @@ const hasProxySource = (cfg: ClashConfig): boolean => {
 
 // --- 策略组构建（完整策略组 + 地区分组 + 可视化开关） ---
 
-const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
+const buildBettboxProxyGroups = (
+  hasNodes: boolean,
+  options: BettboxRuleOptions,
+): ProxyGroup[] => {
   const icon = (f: string) => SETTINGS.ICON_BASE + f;
-  const enableRegion = ruleOptionsEnable.地区分组;
+  const enableRegion = options.地区分组;
 
   // ─── 无节点来源：全部组回退 DIRECT ───
   if (!hasNodes) {
@@ -250,21 +299,23 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
       { name: GROUPS.ALL, type: "select", proxies: ["DIRECT"], icon: icon("Auto.png") },
     ];
     // 有开关的服务组也需生成（否则规则引用会报错），但回退 main
-    if (ruleOptionsEnable.AI)
+    if (options.AI)
       fallback.push({ name: GROUPS.AI, type: "select", proxies: [GROUPS.MAIN], icon: icon("ChatGPT.png") });
-    if (ruleOptionsEnable.Google)
+    if (options.Google)
       fallback.push({ name: GROUPS.GOOGLE, type: "select", proxies: [GROUPS.MAIN], icon: icon("Google_Search.png") });
-    if (ruleOptionsEnable.YouTube)
+    if (options.YouTube)
       fallback.push({ name: GROUPS.YOUTUBE, type: "select", proxies: [GROUPS.MAIN], icon: icon("YouTube.png") });
-    if (ruleOptionsEnable.Telegram)
+    if (options.Telegram)
       fallback.push({ name: GROUPS.TELEGRAM, type: "select", proxies: [GROUPS.MAIN], icon: icon("Telegram.png") });
-    if (ruleOptionsEnable.Steam)
+    if (options.Steam)
       fallback.push({ name: GROUPS.STEAM, type: "select", proxies: [GROUPS.MAIN, "DIRECT"], icon: icon("Steam.png") });
-    if (ruleOptionsEnable.Apple)
+    if (options.Apple)
       fallback.push({ name: GROUPS.APPLE, type: "select", proxies: [GROUPS.MAIN, "DIRECT"], icon: icon("Apple.png") });
-    if (ruleOptionsEnable.Microsoft)
+    if (options.Microsoft)
       fallback.push({ name: GROUPS.MICROSOFT, type: "select", proxies: [GROUPS.MAIN, "DIRECT"], icon: icon("Microsoft.png") });
-    if (ruleOptionsEnable.广告拦截)
+    if (options.Spotify)
+      fallback.push({ name: GROUPS.SPOTIFY, type: "select", proxies: [GROUPS.MAIN], icon: icon("Spotify.png") });
+    if (options.广告拦截)
       fallback.push({ name: GROUPS.ADBLOCK, type: "select", proxies: ["REJECT", "DIRECT", GROUPS.MAIN], icon: icon("AdBlack.png") });
     fallback.push({ name: GROUPS.GLOBAL, type: "select", proxies: [GROUPS.MAIN, "DIRECT"], icon: icon("Global.png") });
     return fallback;
@@ -412,7 +463,7 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   const serviceWithDirect = [...serviceProxies, "DIRECT"];
 
   // AI 组（排除香港）
-  if (ruleOptionsEnable.AI) {
+  if (options.AI) {
     groups.push(
       withExclude(
         {
@@ -443,7 +494,7 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   }
 
   // Google
-  if (ruleOptionsEnable.Google) {
+  if (options.Google) {
     groups.push({
       name: GROUPS.GOOGLE,
       type: "select",
@@ -453,21 +504,21 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   }
 
   // YouTube（默认走 Google 组统一出口）
-  if (ruleOptionsEnable.YouTube) {
-    const ytProxies = ruleOptionsEnable.Google
+  if (options.YouTube) {
+    const ytProxies = options.Google
       ? [GROUPS.GOOGLE, ...serviceProxies]
       : serviceProxies;
     groups.push({
       name: GROUPS.YOUTUBE,
       type: "select",
       proxies: ytProxies,
-      "default-selected": ruleOptionsEnable.Google ? GROUPS.GOOGLE : GROUPS.MAIN,
+      "default-selected": options.Google ? GROUPS.GOOGLE : GROUPS.MAIN,
       icon: icon("YouTube.png"),
     });
   }
 
   // Telegram（首选新加坡，fallback 到 main）
-  if (ruleOptionsEnable.Telegram) {
+  if (options.Telegram) {
     const hasSG = regionNames.includes("SG");
     if (hasSG) {
       groups.push({
@@ -491,7 +542,7 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   }
 
   // Steam
-  if (ruleOptionsEnable.Steam) {
+  if (options.Steam) {
     groups.push({
       name: GROUPS.STEAM,
       type: "select",
@@ -501,7 +552,7 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   }
 
   // Apple
-  if (ruleOptionsEnable.Apple) {
+  if (options.Apple) {
     groups.push({
       name: GROUPS.APPLE,
       type: "select",
@@ -511,7 +562,7 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   }
 
   // Microsoft
-  if (ruleOptionsEnable.Microsoft) {
+  if (options.Microsoft) {
     groups.push({
       name: GROUPS.MICROSOFT,
       type: "select",
@@ -521,7 +572,7 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   }
 
   // Spotify
-  if (ruleOptionsEnable.Spotify) {
+  if (options.Spotify) {
     groups.push({
       name: GROUPS.SPOTIFY,
       type: "select",
@@ -531,7 +582,7 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
   }
 
   // 广告拦截
-  if (ruleOptionsEnable.广告拦截) {
+  if (options.广告拦截) {
     groups.push({
       name: GROUPS.ADBLOCK,
       type: "select",
@@ -547,13 +598,14 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
     proxies: [
       GROUPS.MAIN,
       GROUPS.ALL,
-      ...(ruleOptionsEnable.AI ? [GROUPS.AI] : []),
-      ...(ruleOptionsEnable.Google ? [GROUPS.GOOGLE] : []),
-      ...(ruleOptionsEnable.YouTube ? [GROUPS.YOUTUBE] : []),
-      ...(ruleOptionsEnable.Telegram ? [GROUPS.TELEGRAM] : []),
-      ...(ruleOptionsEnable.Steam ? [GROUPS.STEAM] : []),
-      ...(ruleOptionsEnable.Apple ? [GROUPS.APPLE] : []),
-      ...(ruleOptionsEnable.Microsoft ? [GROUPS.MICROSOFT] : []),
+      ...(options.AI ? [GROUPS.AI] : []),
+      ...(options.Google ? [GROUPS.GOOGLE] : []),
+      ...(options.YouTube ? [GROUPS.YOUTUBE] : []),
+      ...(options.Telegram ? [GROUPS.TELEGRAM] : []),
+      ...(options.Steam ? [GROUPS.STEAM] : []),
+      ...(options.Apple ? [GROUPS.APPLE] : []),
+      ...(options.Microsoft ? [GROUPS.MICROSOFT] : []),
+      ...(options.Spotify ? [GROUPS.SPOTIFY] : []),
       ...regionNames,
       ...(enableRegion ? [GROUPS.OTHER] : []),
       "DIRECT",
@@ -568,6 +620,7 @@ const buildBettboxProxyGroups = (hasNodes: boolean): ProxyGroup[] => {
 
 export function bettboxMain(config: ClashConfig): ClashConfig {
   config = config && typeof config === "object" ? config : {};
+  const options = getRuleOptions();
   const originalProxies: Proxy[] = Array.isArray(config.proxies)
     ? config.proxies
     : [];
@@ -581,8 +634,8 @@ export function bettboxMain(config: ClashConfig): ClashConfig {
   delete config["geo-update-interval"];
   delete config["geox-url"];
 
-  // 根据 ruleOptionsEnable 构建分流规则出口
-  const ruleTargets = buildRuleTargets();
+  // 根据 options 构建分流规则出口
+  const ruleTargets = buildRuleTargets(options);
 
   config["rule-providers"] = {
     ...(config["rule-providers"] || {}),
@@ -597,7 +650,10 @@ export function bettboxMain(config: ClashConfig): ClashConfig {
   makeProxyNamesUnique(originalProxies);
   if (originalProxies.length) config.proxies = originalProxies;
 
-  config["proxy-groups"] = buildBettboxProxyGroups(hasProxySource(config));
+  config["proxy-groups"] = buildBettboxProxyGroups(
+    hasProxySource(config),
+    options,
+  );
 
   applyRuntime(config);
   applySniffer(config);

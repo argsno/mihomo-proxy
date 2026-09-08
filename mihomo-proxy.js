@@ -12,6 +12,12 @@
 var __mihomoProxy = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region src/user-config.ts
+	/**
+	* 用户自定义配置区
+	* ------------------------------------------------------------------
+	* 供用户按需配置强制直连/代理域名、节点排除正则以及 QUIC 拦截开关。
+	* 四个版本共享此配置，修改后执行 pnpm build 即可生效。
+	*/
 	/** 强制直连的域名（后缀匹配），示例：["mycompany.com", "internal.example"] */
 	var BYPASS_DOMAINS = [];
 	/** 强制走代理的域名（精确匹配；完整版出口为 main 组，极简版为「全部」组） */
@@ -21,20 +27,23 @@ var __mihomoProxy = (function(exports) {
 	//#endregion
 	//#region src/settings.ts
 	/**
-	* 健康检查期望状态码。测速地址 generate_204 正常必回 204，
-	* 而内核默认 expected-status 为 `*`（任何响应都算通过），
-	* 酒店/校园网门户劫持返回 200 页面时节点会被误判为可用。
-	* 显式锁定 204 后，被劫持的链路会正确计入失败。
+	* 全局常量配置
+	* ------------------------------------------------------------------
+	* 包含测速策略、规则集路径、通用图标以及预定义地区顺序等常量。
+	*/
+	/**
+	* 健康检查期望状态码。
+	* 测速地址 generate_204 正常返回 204，显式锁定避免门户劫持时误判节点可用。
 	*/
 	var EXPECTED_STATUS = 204;
 	var SETTINGS = {
-		/** Koolson/Qure 彩色图标库 */
+		/** Koolson/Qure 彩色图标库根地址 */
 		ICON_BASE: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/",
 		/** MetaCubeX meta-rules-dat 规则集根地址 */
 		RULE_PROVIDER_URL_BASE: "https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@meta/geo",
 		/** 规则集本地缓存目录 */
 		RULE_PROVIDER_PATH: "./rules",
-		/** 规则集更新间隔（秒），24 小时 */
+		/** 规则集更新间隔（秒）：24 小时 */
 		PROVIDER_INTERVAL: 86400,
 		/** 策略组中地区的展示顺序（同时决定生成顺序） */
 		REGION_ORDER: [
@@ -49,12 +58,8 @@ var __mihomoProxy = (function(exports) {
 			"AS"
 		],
 		/**
-		* url-test 自动测速组的通用参数。
-		* interval/tolerance 对长会话敏感：Google 系（Drive 分片上传、Gmail 长轮询、
-		* FCM）与 AI 流式响应都是长连接，一次切换就是一次断流；更糟的是出口 IP
-		* 跟着变，Google/OpenAI 侧的会话风控会插入验证或直接 401。
-		* 原 300s/50ms 在跨境线路的正常抖动下几乎每轮都会重选，故放宽到
-		* 600s/100ms（与手机版 600/80 同一量级）。
+		* url-test 自动测速组参数（桌面端）。
+		* 采用 600s 间隔与 100ms 容差，降低长连接频繁切换造成的断流风险。
 		*/
 		URL_TEST_EXTRA: {
 			hidden: true,
@@ -67,9 +72,8 @@ var __mihomoProxy = (function(exports) {
 			"expected-status": EXPECTED_STATUS
 		},
 		/**
-		* 手机端（FlClash）url-test 参数：在桌面参数基础上放宽。
-		* interval 拉长到 10 分钟，减少后台唤醒次数以省电；
-		* tolerance 放宽到 80ms，避免移动网络抖动导致频繁切换节点、断连接。
+		* url-test 自动测速组参数（移动端 / FlClash）。
+		* 放宽至 600s 间隔与 80ms 容差，降低后台唤醒频次并减少移动网络抖动引起的频繁切换。
 		*/
 		MOBILE_URL_TEST_EXTRA: {
 			hidden: true,
@@ -81,7 +85,7 @@ var __mihomoProxy = (function(exports) {
 			"max-failed-times": 3,
 			"expected-status": EXPECTED_STATUS
 		},
-		/** fallback 组的通用参数 */
+		/** fallback 故障转移组通用参数 */
 		FALLBACK_TEST_EXTRA: {
 			url: "https://www.gstatic.com/generate_204",
 			interval: 300,
@@ -90,36 +94,39 @@ var __mihomoProxy = (function(exports) {
 			"max-failed-times": 3,
 			"expected-status": EXPECTED_STATUS
 		},
-		/** 机场信息类节点（到期/官网/流量等）识别过滤器 */
+		/** 机场营销/通知/信息类无效节点过滤器（用于从正常节点池中剔除） */
 		INFO_FILTER: /tg|telegram|倒卖|到期|电报|订阅|发布|防止|返利|购买|官方|官网|工单|过期|规则|建议|客服|联系|流量|剩余|失联|网址|邮箱|续费|邀请|重置|梯子|群/i
 	};
-	/** DNS 服务器常量（集中定义，便于统一维护） */
+	/**
+	* 常用 DNS 上游服务器
+	*/
 	var DNS_SERVERS = {
-		/** bootstrap（纯 IP，用于解析 DoH 域名本身） */
+		/** Bootstrap DNS（纯 IP，用于解析 DoH 域名本身） */
 		BOOTSTRAP: [
 			"223.5.5.5",
 			"119.29.29.29",
 			"1.1.1.1",
 			"8.8.8.8"
 		],
-		/** 国内加密 DoH（AliDNS + DNSPod） */
+		/** 国内加密 DoH（AliDNS + DNSPod，用于节点解析与国内白名单） */
 		CN_DOH: ["https://dns.alidns.com/dns-query", "https://doh.pub/dns-query"],
 		/**
-		* 国际加密 DoH（IP 形式免 bootstrap）。
-		* 刻意不含 8.8.8.8：respect-rules=true 下 DoH 连接自身要过分流规则，
-		* 而 8.8.8.8 命中 `RULE-SET,google-ip,<Google 组>,no-resolve` —— DNS 上游
-		* 就被绑死在 Google 出口上，Google 组节点一抖，Google 域名的解析也跟着
-		* 抖，单点故障被放大成"解析超时 + 连接超时"双重等待。
-		* 换成 Quad9（9.9.9.9，非 Google ASN，走 MATCH 到主代理组）解开耦合，
-		* 同时保留 1.1.1.1 作首选，两家分属不同运营方避免同源故障。
+		* 国际加密 DoH（IP 格式，直连免 Bootstrap）。
+		* 默认作为全局 nameserver 经代理出站，避免境内运营商截获解析。
+		* 使用 Quad9 + Cloudflare 双源异构组合，避免单一服务商单点故障。
 		*/
 		GLOBAL_DOH: ["https://1.1.1.1/dns-query", "https://9.9.9.9/dns-query"]
 	};
-	/** Fake-IP 地址池 */
+	/** Fake-IP IPv4 / IPv6 地址池 */
 	var FAKE_IP_RANGE = "198.18.0.1/16";
 	var FAKE_IP_RANGE6 = "fc00::/18";
 	//#endregion
 	//#region src/utils.ts
+	/**
+	* 基础工具函数
+	* ------------------------------------------------------------------
+	* 提供数组去重、正则转义、节点名归一化、倍率解析与线路质量排序等通用功能。
+	*/
 	/** 数组去重并剔除 falsy */
 	var uniq = (arr = []) => [...new Set(arr.filter(Boolean))];
 	/** 转义正则元字符 */
@@ -205,6 +212,11 @@ var __mihomoProxy = (function(exports) {
 	});
 	//#endregion
 	//#region src/regions.ts
+	/**
+	* 地区定义与匹配规则
+	* ------------------------------------------------------------------
+	* 预置常见国家与地区的关键词及图标，并通过词边界正则精确分类。
+	*/
 	var REGION_DEFS = [
 		{
 			name: "HK",
@@ -379,7 +391,7 @@ var __mihomoProxy = (function(exports) {
 	var REGIONS = buildRegions();
 	//#endregion
 	//#region src/rule-providers.ts
-	/** GeoSite 域名类规则集：{ key: 内部逻辑名, file: 远端文件名 } */
+	/** GeoSite 域名规则集列表 */
 	var GEOSITE_PROVIDERS = [
 		{
 			key: "category-ads-all",
@@ -482,7 +494,7 @@ var __mihomoProxy = (function(exports) {
 			file: "category-ntp"
 		}
 	];
-	/** GeoIP 网段类规则集：{ key, file } */
+	/** GeoIP 网段规则集列表 */
 	var GEOIP_PROVIDERS = [
 		{
 			key: "private-ip",
@@ -536,12 +548,15 @@ var __mihomoProxy = (function(exports) {
 	//#endregion
 	//#region src/rules.ts
 	/**
-	* Google 系 QUIC 阻断规则（UDP 443 → REJECT，迫使客户端回落 TCP）。
-	* 必须排在所有 Google/AI/YouTube 规则之前才会命中（rules 先匹配先停止）。
-	* 用 OR + DOMAIN-SUFFIX 显式列举而非 `RULE-SET,google`：逻辑规则内嵌
-	* RULE-SET 在部分内核版本上行为不一致，显式后缀无歧义且覆盖了实际跑
-	* QUIC 的全部域名族。REJECT 而非 REJECT-DROP —— 静默丢弃会让客户端继续
-	* 等超时，正好是我们要消除的那几秒卡顿。
+	* 分流规则构建器
+	* ------------------------------------------------------------------
+	* 规则遵循严格的有序匹配机制（先匹配即生效，越具体的规则越靠前）。
+	* 多个版本共享同一份规则骨架，仅通过 RuleTargets 参数化注入不同出口策略组。
+	*/
+	/**
+	* Google 系 QUIC 阻断规则（UDP 443 → REJECT，迫使客户端立即回落 TCP）。
+	* 必须置于所有 Google/AI/YouTube 规则之前；使用 REJECT 而非 REJECT-DROP，
+	* 避免浏览器因静默丢包超时等待数秒。
 	*/
 	var GOOGLE_QUIC_DOMAINS = [
 		"googleapis.com",
@@ -552,13 +567,10 @@ var __mihomoProxy = (function(exports) {
 		"ytimg.com",
 		"ggpht.com"
 	];
-	var googleQuicRule = () => [`AND,((NETWORK,udp),(DST-PORT,443),(OR,(${GOOGLE_QUIC_DOMAINS.map((d) => `(DOMAIN-SUFFIX,${d})`).join(",")}))),REJECT`];
+	var googleQuicRule = (enabled = true) => enabled ? [`AND,((NETWORK,udp),(DST-PORT,443),(OR,(${GOOGLE_QUIC_DOMAINS.map((d) => `(DOMAIN-SUFFIX,${d})`).join(",")}))),REJECT`] : [];
 	/**
-	* 构建静态规则。分流目标由 targets 注入。
-	* 设计要点：
-	*  - Google FCM 走代理，不再 DIRECT（Plan 4）。
-	*  - Google / YouTube / AI / Telegram / Steam / Apple / Microsoft 各自独立分流。
-	*  - 国区子集(*-cn)直连，全球集走对应代理组。
+	* 构建静态分流规则列表。
+	* - 顺序敏感：广告拦截 → 自定义 → 游戏直连 → 基础设施 → QUIC阻断 → AI → Google → 业务服务 → GFW → 国内直连 → MATCH
 	*/
 	var buildStaticRules = (t) => [
 		`RULE-SET,category-ads-all,${t.adblock}`,
@@ -571,7 +583,7 @@ var __mihomoProxy = (function(exports) {
 		"RULE-SET,cloudflare,DIRECT",
 		"RULE-SET,private,DIRECT",
 		"RULE-SET,private-ip,DIRECT,no-resolve",
-		...googleQuicRule(),
+		...googleQuicRule(t.blockQuic),
 		`RULE-SET,openai,${t.ai}`,
 		`RULE-SET,anthropic,${t.ai}`,
 		`RULE-SET,perplexity,${t.ai}`,
@@ -597,7 +609,7 @@ var __mihomoProxy = (function(exports) {
 		`RULE-SET,apple,${t.apple}`,
 		"RULE-SET,microsoft-cn,DIRECT",
 		`RULE-SET,microsoft,${t.microsoft}`,
-		`RULE-SET,spotify,${t.proxy}`,
+		`RULE-SET,spotify,${t.spotify ?? t.proxy}`,
 		"RULE-SET,connectivity-check,DIRECT",
 		"RULE-SET,category-ntp,DIRECT",
 		`RULE-SET,gfw,${t.proxy}`,
@@ -627,6 +639,11 @@ var __mihomoProxy = (function(exports) {
 	});
 	//#endregion
 	//#region src/proxies.ts
+	/**
+	* 代理节点处理与分类
+	* ------------------------------------------------------------------
+	* 负责节点的重名去重、无效信息过滤、地区正则归类与排序。
+	*/
 	var ensureConfigObject = (input) => input && typeof input === "object" ? input : {};
 	var getOriginalProxies = (input) => Array.isArray(input.proxies) ? input.proxies : [];
 	/** 节点重名去冲突：追加 _1/_2… 后缀 */
@@ -661,8 +678,8 @@ var __mihomoProxy = (function(exports) {
 		normalProxies: []
 	});
 	/**
-	* 按地区分类，并对每个地区/Other 组内节点自动排序。
-	* 单次遍历完成匹配（Plan 16：避免重复遍历）。
+	* 按地区分类，并对每个地区/Other 组内节点自动按线路与倍率排序。
+	* 通过单次遍历完成正则匹配。
 	*/
 	var classifyProxiesByRegion = (normalProxies = [], regions = []) => {
 		const regionData = regions.map((r) => ({
@@ -805,6 +822,15 @@ var __mihomoProxy = (function(exports) {
 	};
 	//#endregion
 	//#region src/dns.ts
+	/**
+	* DNS 架构配置构建器
+	* ------------------------------------------------------------------
+	* 核心设计原则：防 DNS 泄露 + Smart 上游精确分流。
+	* - respect-rules: true 确保境外 DNS 请求经代理通道出站，境外域名绝不落入国内解析商
+	* - proxy-server-nameserver 采用国内加密 DoH，保证节点域名直连可解且不受污染
+	* - direct-nameserver 采用系统 DNS + 国内 DoH，配合 follow-policy 处理直连域名
+	* - nameserver-policy 精确分派国内外规则集，杜绝解析污染与解析回环
+	*/
 	var applyDns = (cfg) => {
 		const dns = cfg.dns || {};
 		const fakeIpFilter = uniq([
@@ -876,6 +902,12 @@ var __mihomoProxy = (function(exports) {
 	};
 	//#endregion
 	//#region src/runtime.ts
+	/**
+	* 运行时、域名嗅探与虚拟网卡配置
+	* ------------------------------------------------------------------
+	* 负责底层网络性能优化（并发握手、长连接保活、Fake-IP 映射持久化）、
+	* 流量嗅探（Sniffer 协议识别与端口互斥）以及 TUN 虚拟网卡配置。
+	*/
 	var applyRuntime = (cfg) => {
 		cfg.mode = "rule";
 		cfg["log-level"] = "warning";

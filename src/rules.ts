@@ -27,8 +27,8 @@ const GOOGLE_QUIC_DOMAINS = [
   "ggpht.com",
 ];
 
-const googleQuicRule = (): string[] =>
-  BLOCK_GOOGLE_QUIC
+const googleQuicRule = (enabled: boolean = BLOCK_GOOGLE_QUIC): string[] =>
+  enabled
     ? [
         `AND,((NETWORK,udp),(DST-PORT,443),(OR,(${GOOGLE_QUIC_DOMAINS.map(
           (d) => `(DOMAIN-SUFFIX,${d})`,
@@ -50,8 +50,11 @@ export interface RuleTargets {
   steam: string;
   apple: string;
   microsoft: string;
+  spotify?: string;
   /** 主代理出口（兜底与未指定独立组的国外服务） */
   proxy: string;
+  /** 是否阻断 Google QUIC（默认取 user-config BLOCK_GOOGLE_QUIC） */
+  blockQuic?: boolean;
 }
 
 /**
@@ -78,7 +81,7 @@ export const buildStaticRules = (t: RuleTargets): string[] => [
   "RULE-SET,private-ip,DIRECT,no-resolve",
 
   // Google QUIC 阻断（必须排在 Google/AI 规则之前）
-  ...googleQuicRule(),
+  ...googleQuicRule(t.blockQuic),
 
   // AI 独立服务（避免被后续规则误匹配）
   `RULE-SET,openai,${t.ai}`,
@@ -116,7 +119,7 @@ export const buildStaticRules = (t: RuleTargets): string[] => [
   `RULE-SET,microsoft,${t.microsoft}`,
 
   // 流媒体服务
-  `RULE-SET,spotify,${t.proxy}`,
+  `RULE-SET,spotify,${t.spotify ?? t.proxy}`,
 
   // 网络连通性检测与时间同步直连
   "RULE-SET,connectivity-check,DIRECT",

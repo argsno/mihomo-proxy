@@ -713,6 +713,118 @@ assertCommon("bettbox", bettbox);
     "[bettbox] 无节点来源时 main 回退 DIRECT",
   );
   assertRuleTargets("bettbox-empty", emptyBettbox);
+
+  // ─── Bettbox 客户端特有机制验证 ───
+  const bettboxRawScript = readFileSync(
+    new URL("../dist/bettbox-flclash.js", import.meta.url),
+    "utf8",
+  );
+
+  // 1. isCompatibleWithBettbox 兼容性标记（前 2000 字符内）
+  const head2000 = bettboxRawScript.slice(0, 2000);
+  assert(
+    head2000.includes("Compatible_With_Bettbox"),
+    "[bettbox] 前 2000 字符包含 Compatible_With_Bettbox 标识",
+  );
+
+  // 2. 模拟 Bettbox extractScriptOptions 提取开关与图标
+  const extractCode = `
+    var console = { log: function() {}, warn: function() {}, error: function() {}, info: function() {}, debug: function() {} };
+    (function() {
+      ${bettboxRawScript}
+      var options = typeof ruleOptionsEnable !== 'undefined' && ruleOptionsEnable && typeof ruleOptionsEnable === 'object' ? ruleOptionsEnable : {};
+      var icons = {};
+      if (typeof serviceConfigs !== 'undefined' && Array.isArray(serviceConfigs)) {
+        for (var i = 0; i < serviceConfigs.length; i++) {
+          var svc = serviceConfigs[i];
+          if (svc && svc.name && typeof svc.icon === 'string') {
+            icons[svc.name] = svc.icon;
+          }
+        }
+      }
+      return JSON.stringify({ options: options, icons: icons });
+    })();
+  `;
+  const extracted = JSON.parse(vm.runInNewContext(extractCode));
+  const expectedOptions = [
+    "Google",
+    "YouTube",
+    "AI",
+    "Telegram",
+    "Steam",
+    "Apple",
+    "Microsoft",
+    "Spotify",
+    "广告拦截",
+    "地区分组",
+    "屏蔽QUIC",
+  ];
+  for (const opt of expectedOptions) {
+    assert(
+      extracted.options && extracted.options[opt] === true,
+      `[bettbox] 提取到自定义开关: ${opt} (默认开启)`,
+    );
+    assert(
+      typeof extracted.icons?.[opt] === "string" &&
+        extracted.icons[opt].startsWith("https://"),
+      `[bettbox] 开关 ${opt} 拥有有效图标 URL: ${extracted.icons?.[opt]}`,
+    );
+  }
+
+  // 3. 模拟 Bettbox 用户切换开关并重新求值
+  // 测试场景：用户关闭 Google、YouTube、地区分组、屏蔽QUIC
+  const customOptions = {
+    Google: false,
+    YouTube: false,
+    地区分组: false,
+    屏蔽QUIC: false,
+  };
+  const evaluateCustomCode = `
+    (function() {
+      ${bettboxRawScript}
+      if (typeof ruleOptionsEnable !== "undefined") {
+        Object.assign(ruleOptionsEnable, ${JSON.stringify(customOptions)});
+      }
+      return main(${JSON.stringify(flclashConfig())});
+    })();
+  `;
+  const customResult = vm.runInNewContext(evaluateCustomCode);
+  const customGroupNames = (customResult["proxy-groups"] ?? []).map((g) => g.name);
+
+  // Google 和 YouTube 策略组应被跳过不生成
+  assert(
+    !customGroupNames.includes("Google"),
+    "[bettbox-自定义] 关闭 Google 开关后不生成 Google 策略组",
+  );
+  assert(
+    !customGroupNames.includes("YouTube"),
+    "[bettbox-自定义] 关闭 YouTube 开关后不生成 YouTube 策略组",
+  );
+  // Google 和 YouTube 规则应平滑回退到 main
+  assert(
+    customResult.rules.some((r) => /^RULE-SET,google,main/.test(r)),
+    "[bettbox-自定义] 关闭 Google 开关后 google 规则回退到 main",
+  );
+  assert(
+    customResult.rules.some((r) => /^RULE-SET,youtube,main/.test(r)),
+    "[bettbox-自定义] 关闭 YouTube 开关后 youtube 规则回退到 main",
+  );
+
+  // 地区分组应被跳过不生成
+  assert(
+    !customGroupNames.includes("HK") && !customGroupNames.includes("Other"),
+    "[bettbox-自定义] 关闭地区分组后不生成地区组与 Other 组",
+  );
+
+  // 屏蔽QUIC关闭后，不应含有 Google QUIC 阻断规则
+  const hasQuicRule = customResult.rules.some((r) =>
+    r.includes("googleapis.com") && r.includes("DST-PORT,443") && r.includes("REJECT"),
+  );
+  assert(
+    !hasQuicRule,
+    "[bettbox-自定义] 关闭屏蔽QUIC后未生成 QUIC 阻断规则",
+  );
+  assertRuleTargets("bettbox-custom", customResult);
 }
 
 // ============ 导出内核校验用 YAML + 同步产物 ============
