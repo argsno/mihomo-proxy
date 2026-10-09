@@ -1,22 +1,42 @@
 /**
-* simple-mihomo — 极简业务分流版 v3.0
+* bettbox-smart — Bettbox 智能选路版覆写脚本 v3.0
 * ------------------------------------------------------------------
-* mihomo-proxy.js 的极简姊妹版：保留全部业务分流与 DNS/TUN 优化，
-* 但策略组只有三个，节点不做地区分组，简洁好理解：
+* 布局与 flclash-mobile 相同的三个极简策略组，但两个隐藏自动组改用
+* Bettbox 内核的 smart 类型，按真实连接质量打分选路：
 *
-*   全部     —— 所有节点（内置自动测速，默认自动选优）
-*   AI       —— 可访问 AI 服务的纯净节点（自动剔除香港）
-*   广告拦截 —— REJECT（默认拦截）/ DIRECT / 全部 三选一
+*   智能选路    —— 全部节点（首响应延迟 / 重传 / 失败与站点记忆动态选优）
+*   全部        —— 智能选路打头，可手动切任意节点
+*   AI 智能选路 —— 排除香港的纯净节点池（OpenAI/Claude 常封锁 HK 出口）
+*   AI          —— AI 智能选路打头，可手动切换
+*   广告拦截    —— REJECT（默认拦截）/ DIRECT / 全部 三选一
 *
-* 业务分流规则与 mihomo-proxy.js 共享同一份源码模块（src/），
-* 构建期即保证两版规则/DNS 架构一致，不再手工同步。
+* 与 url-test 的区别：url-test 只看周期性测速延迟；smart 用真实连接
+* 的首响应延迟打分（含重传惩罚与按站点记忆），失败自动回退下一候选；
+* 内核固定每 5 分钟重测一轮，interval 参数无效。
+* 可在 src/user-config.ts 的 POLICY_PRIORITY 中按正则给节点配优先级。
+*
+* ── 仅限 Bettbox（smart 为内核专属能力）──────────────────────────
+* 上游 mihomo 内核（FlClash / Sparkle / Clash Verge Rev 等）不支持
+* smart 组，配置校验会报 `unsupported type: smart`，请勿混用；
+* 需要 url-test 版本请改用 flclash-mobile.js。
+*
+* ── 用法 ──────────────────────────────────────────────────────────
+* 设置 → 高级设置 → 脚本 → 添加 →（右上角可远程下载本脚本链接）→
+* 保存；再到 配置 → 对应订阅 → 覆写 → 模式选「脚本」→ 勾选本脚本。
+*
+* ── 必须在 App 内正确的设置（脚本无法覆盖，会被 App 强制改写）────
+*  1. 设置 → 网络 →「覆写 DNS」保持【关闭】
+*  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
+*  3. 出站模式选「规则」；TUN 栈选 mixed；
+*     「查找进程」建议设为 off
+*
 * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
 *
 * 仓库地址：https://github.com/wchiway/mihomo-proxy
-* 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/simple-mihomo.js
-* 提醒：使用系统代理时 fake-ip 不会生效，建议使用 TUN 模式。
+* 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-smart.js
+* 客户端：https://github.com/appshubcc/Bettbox
 */
-var __mihomoSimple = (function(exports) {
+var __mihomoBettboxSmart = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region src/user-config.ts
 	/**
@@ -142,80 +162,6 @@ var __mihomoSimple = (function(exports) {
 	/** Fake-IP IPv4 / IPv6 地址池 */
 	var FAKE_IP_RANGE = "198.18.0.1/16";
 	var FAKE_IP_RANGE6 = "fc00::/18";
-	//#endregion
-	//#region src/utils.ts
-	/**
-	* 基础工具函数
-	* ------------------------------------------------------------------
-	* 提供数组去重、正则转义、节点名归一化、倍率解析与线路质量排序等通用功能。
-	*/
-	/** 数组去重并剔除 falsy */
-	var uniq = (arr = []) => [...new Set(arr.filter(Boolean))];
-	var _mulCache = /* @__PURE__ */ new Map();
-	/**
-	* 从节点名解析计费倍率（如 "0.2x" / "1倍" / "2X"）。
-	* 未标注时默认 1。用于策略组内自动排序。
-	*/
-	var parseMultiplier = (name = "") => {
-		const cached = _mulCache.get(name);
-		if (cached !== void 0) return cached;
-		let val = 1;
-		const m = String(name).match(/(\d+(?:\.\d+)?)\s*(?:x|倍|×|✕)/i);
-		if (m) {
-			const v = parseFloat(m[1]);
-			if (v > 0 && v < 100) val = v;
-		}
-		_mulCache.set(name, val);
-		return val;
-	};
-	var _lineCache = /* @__PURE__ */ new Map();
-	var LINE_TAGS = [
-		{
-			tag: "IEPL",
-			re: /IEPL/i
-		},
-		{
-			tag: "IPLC",
-			re: /IPLC/i
-		},
-		{
-			tag: "BGP",
-			re: /BGP/i
-		},
-		{
-			tag: "GAME",
-			re: /GAME|游戏|游戲/i
-		},
-		{
-			tag: "HOME",
-			re: /RESIDENT|HOME|住宅|家宽|家寬|原生|NATIVE/i
-		}
-	];
-	/** 解析节点线路类型（专线 / 游戏 / 家宽等），无标注返回 ""。 */
-	var parseLineType = (name = "") => {
-		const cached = _lineCache.get(name);
-		if (cached !== void 0) return cached;
-		let tag = "";
-		for (const t of LINE_TAGS) if (t.re.test(name)) {
-			tag = t.tag;
-			break;
-		}
-		_lineCache.set(name, tag);
-		return tag;
-	};
-	/** 线路优先级：专线(IEPL/IPLC) > BGP > 其他，数值越小越靠前。 */
-	var lineRank = (tag) => tag === "IEPL" || tag === "IPLC" ? 0 : tag === "BGP" ? 1 : 2;
-	/**
-	* 节点自动排序：先按线路质量，再按倍率升序（省流量优先），最后按名称。
-	* 让优质/低倍率线路稳定地出现在 select 组顶部。
-	*/
-	var sortProxyNames = (names = []) => names.slice().sort((a, b) => {
-		const lr = lineRank(parseLineType(a)) - lineRank(parseLineType(b));
-		if (lr !== 0) return lr;
-		const mr = parseMultiplier(a) - parseMultiplier(b);
-		if (mr !== 0) return mr;
-		return a.localeCompare(b);
-	});
 	//#endregion
 	//#region src/rule-providers.ts
 	/** GeoSite 域名规则集列表 */
@@ -373,6 +319,15 @@ var __mihomoSimple = (function(exports) {
 		return providers;
 	};
 	//#endregion
+	//#region src/utils.ts
+	/**
+	* 基础工具函数
+	* ------------------------------------------------------------------
+	* 提供数组去重、正则转义、节点名归一化、倍率解析与线路质量排序等通用功能。
+	*/
+	/** 数组去重并剔除 falsy */
+	var uniq = (arr = []) => [...new Set(arr.filter(Boolean))];
+	//#endregion
 	//#region src/rules.ts
 	/**
 	* 分流规则构建器
@@ -464,28 +419,6 @@ var __mihomoSimple = (function(exports) {
 		if (!r || r.startsWith("#")) return false;
 		return /,DIRECT(?:,|$)/i.test(r);
 	});
-	//#endregion
-	//#region src/proxies.ts
-	/** 节点重名去冲突：追加 _1/_2… 后缀 */
-	var makeProxyNamesUnique = (proxies = []) => {
-		const used = /* @__PURE__ */ new Set();
-		const nextIdx = /* @__PURE__ */ new Map();
-		proxies.forEach((p) => {
-			if (!p || !p.name) return;
-			const base = String(p.name);
-			if (!used.has(base)) {
-				used.add(base);
-				nextIdx.set(base, 1);
-				return;
-			}
-			let idx = nextIdx.get(base) ?? 1;
-			let candidate = `${base}_${idx}`;
-			while (used.has(candidate)) candidate = `${base}_${++idx}`;
-			p.name = candidate;
-			used.add(candidate);
-			nextIdx.set(base, idx + 1);
-		});
-	};
 	//#endregion
 	//#region src/dns.ts
 	/**
@@ -635,22 +568,61 @@ var __mihomoSimple = (function(exports) {
 		};
 	};
 	//#endregion
-	//#region src/simple-main.ts
+	//#region src/proxies.ts
+	/** 节点重名去冲突：追加 _1/_2… 后缀 */
+	var makeProxyNamesUnique = (proxies = []) => {
+		const used = /* @__PURE__ */ new Set();
+		const nextIdx = /* @__PURE__ */ new Map();
+		proxies.forEach((p) => {
+			if (!p || !p.name) return;
+			const base = String(p.name);
+			if (!used.has(base)) {
+				used.add(base);
+				nextIdx.set(base, 1);
+				return;
+			}
+			let idx = nextIdx.get(base) ?? 1;
+			let candidate = `${base}_${idx}`;
+			while (used.has(candidate)) candidate = `${base}_${++idx}`;
+			p.name = candidate;
+			used.add(candidate);
+			nextIdx.set(base, idx + 1);
+		});
+	};
+	//#endregion
+	//#region src/smart-main.ts
 	/**
-	* 极简业务分流版主流程（Sparkle / Clash Verge Rev）
+	* Bettbox 智能选路版覆写脚本（bettbox-smart）
 	* ------------------------------------------------------------------
-	* 策略组收敛为三个核心组：
-	* - 全部：汇总所有节点并内置自动测速（默认自动选优）
-	* - AI：剔除香港出口的纯净节点池（内置独立测速）
-	* - 广告拦截：REJECT / DIRECT / 全部 可切换
+	* 布局与 flclash-mobile 完全一致（三个极简策略组 + include-all 运行时
+	* 纳入节点），仅两个隐藏自动组改用 Bettbox 内核的 smart 类型：
+	*
+	*   smart 组按真实连接质量打分选路 —— 首响应延迟 EWMA + 重传惩罚
+	*   （1% ≈ 50ms）+ 失败降权 + 按站点记忆，失败时按优选集合 / 健康节点 /
+	*   失败节点的顺序自动回退；内核固定每 5 分钟重测一轮。
+	*   url-test 只看周期性测速延迟，感知不到真实连接质量，这是二者的核心差异。
+	*
+	*   智能选路    —— 全部节点（默认选优，后台按真实连接自动打分）
+	*   全部        —— 智能选路打头，可手动切任意节点
+	*   AI 智能选路 —— 排除香港的纯净节点池（OpenAI/Claude 常封锁 HK 出口）
+	*   AI          —— AI 智能选路打头，可手动切换
+	*   广告拦截    —— REJECT（默认拦截）/ DIRECT / 全部 三选一
+	*
+	* 注意：smart 组是 Bettbox 内核专属能力，上游 mihomo 内核（FlClash /
+	* Sparkle / Clash Verge Rev 等）会因 `unsupported type: smart` 校验失败。
 	*/
-	/** 三个策略组的名称定义 */
+	/** 三个策略组的名称（规则出口统一引用这里，避免魔法字符串） */
 	var GROUPS = {
 		ALL: "全部",
 		AI: "AI",
 		ADBLOCK: "广告拦截"
 	};
-	/** 香港节点识别正则（AI 服务需剔除香港出口） */
+	/** 两个隐藏的自动选路组（供上面的 select 组引用） */
+	var AUTO = {
+		ALL: "智能选路",
+		AI: "AI 智能选路"
+	};
+	/** 香港节点识别（AI 组需剔除，OpenAI/Claude 等常封锁 HK 出口） */
 	var HK_FILTER = /香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰/i;
 	var STATIC_RULES = buildStaticRules({
 		adblock: GROUPS.ADBLOCK,
@@ -664,76 +636,134 @@ var __mihomoSimple = (function(exports) {
 		proxy: GROUPS.ALL
 	});
 	/**
-	* 构建节点池：
-	* - allNames: 全部可用节点（剔除自定义过滤与广告信息节点）
-	* - aiNames: AI 专用池（排除香港节点；全排除则回退至 allNames）
+	* 取正则源码，空正则返回 ""。
+	* 空 RegExp 的 source 是 "(?:)"，直接拼进过滤器会匹配空串导致所有节点被排除。
 	*/
-	var buildProxyPools = (proxies = []) => {
-		const allNames = sortProxyNames(uniq(proxies.filter((p) => p && p.name && !CUSTOM_FILTER.test(p.name) && !SETTINGS.INFO_FILTER.test(p.name)).map((p) => p.name)));
-		const nonHk = allNames.filter((n) => !HK_FILTER.test(n));
-		return {
-			allNames,
-			aiNames: nonHk.length ? nonHk : allNames
-		};
+	var filterSource = (re) => {
+		const src = re && re.source ? String(re.source) : "";
+		return !src || src === "(?:)" ? "" : src;
 	};
-	var buildSimpleProxyGroups = ({ allNames, aiNames }) => {
+	/**
+	* 合并多个正则为一条 exclude-filter。
+	* 统一包装进非捕获组 `(?i)(?:...)`，确保对全部分支生效。
+	*/
+	var buildExcludeFilter = (...regexps) => {
+		const parts = regexps.map(filterSource).filter(Boolean);
+		return parts.length ? `(?i)(?:${parts.join("|")})` : "";
+	};
+	/** 通用排除：机场信息类节点 + 用户自定义过滤 */
+	var EXCLUDE_COMMON = buildExcludeFilter(SETTINGS.INFO_FILTER, CUSTOM_FILTER);
+	/** AI 组排除：通用排除 + 香港节点 */
+	var EXCLUDE_AI = buildExcludeFilter(SETTINGS.INFO_FILTER, CUSTOM_FILTER, HK_FILTER);
+	/** 仅在过滤器非空时写入字段，避免下发空字符串 */
+	var withExclude = (group, filter) => filter ? {
+		...group,
+		"exclude-filter": filter
+	} : group;
+	/** 仅在用户配置了 policy-priority 时写入字段（空字符串会被内核判为非法值） */
+	var withPolicyPriority = (group, policyPriority) => policyPriority.trim() ? {
+		...group,
+		"policy-priority": policyPriority
+	} : group;
+	/**
+	* include-all 组的空成员兜底（empty-fallback）。
+	* 过滤后空组显式回退至 DIRECT，避免 UI 显示含混的 COMPATIBLE。
+	*/
+	var EMPTY_FALLBACK = { "empty-fallback": "DIRECT" };
+	/**
+	* 订阅是否提供了节点来源。
+	* proxies 与 proxy-providers 任一非空即可 —— provider 为 http 类型时
+	* 配置校验阶段尚未下载，节点数为 0 属正常，不能据此判空。
+	* 注：Bettbox / FlClash 在调用脚本前会把缺失的 proxy-providers 补成 {}，
+	* 所以这里必须判 key 数量而不是判是否存在。
+	*/
+	var hasProxySource = (cfg) => {
+		const proxies = Array.isArray(cfg.proxies) ? cfg.proxies : [];
+		const providers = cfg["proxy-providers"];
+		const providerCount = providers && typeof providers === "object" ? Object.keys(providers).length : 0;
+		return proxies.length > 0 || providerCount > 0;
+	};
+	/**
+	* 构建策略组（导出供单测直接断言）。
+	*
+	* include-all 的内核语义与过滤时机同 flclash-mobile：
+	* 组成员由内核在 GroupBase.GetProxies 里按 exclude-filter 过滤后得到，
+	* 这里只声明空成员兜底与默认选中项。
+	*/
+	var buildSmartProxyGroups = (hasNodes, policyPriority = "") => {
 		const icon = (f) => SETTINGS.ICON_BASE + f;
-		const groups = [];
-		if (allNames.length) {
-			groups.push({
-				name: "自动测速",
-				type: "url-test",
-				proxies: allNames,
-				icon: icon("Auto.png"),
-				...SETTINGS.URL_TEST_EXTRA
-			});
-			groups.push({
+		if (!hasNodes) return [
+			{
 				name: GROUPS.ALL,
 				type: "select",
-				proxies: ["自动测速", ...allNames],
-				"default-selected": "自动测速",
+				proxies: ["DIRECT"],
 				icon: icon("Global.png")
-			});
-		} else groups.push({
-			name: GROUPS.ALL,
-			type: "select",
-			proxies: ["DIRECT"],
-			icon: icon("Global.png")
-		});
-		if (aiNames.length) {
-			groups.push({
-				name: "AI 自动测速",
-				type: "url-test",
-				proxies: aiNames,
-				icon: icon("ChatGPT.png"),
-				...SETTINGS.URL_TEST_EXTRA
-			});
-			groups.push({
+			},
+			{
 				name: GROUPS.AI,
 				type: "select",
-				proxies: ["AI 自动测速", ...aiNames],
-				"default-selected": "AI 自动测速",
+				proxies: [GROUPS.ALL],
 				icon: icon("ChatGPT.png")
-			});
-		} else groups.push({
-			name: GROUPS.AI,
-			type: "select",
-			proxies: [GROUPS.ALL],
-			icon: icon("ChatGPT.png")
-		});
-		groups.push({
-			name: GROUPS.ADBLOCK,
-			type: "select",
-			proxies: [
-				"REJECT",
-				"DIRECT",
-				GROUPS.ALL
-			],
-			icon: icon("AdBlack.png")
-		});
-		return groups;
+			},
+			{
+				name: GROUPS.ADBLOCK,
+				type: "select",
+				proxies: [
+					"REJECT",
+					"DIRECT",
+					GROUPS.ALL
+				],
+				icon: icon("AdBlack.png")
+			}
+		];
+		return [
+			withPolicyPriority(withExclude({
+				name: AUTO.ALL,
+				type: "smart",
+				proxies: [],
+				"include-all": true,
+				icon: icon("Auto.png"),
+				...SETTINGS.SMART_EXTRA,
+				...EMPTY_FALLBACK
+			}, EXCLUDE_COMMON), policyPriority),
+			withExclude({
+				name: GROUPS.ALL,
+				type: "select",
+				proxies: [AUTO.ALL],
+				"include-all": true,
+				"default-selected": AUTO.ALL,
+				icon: icon("Global.png")
+			}, EXCLUDE_COMMON),
+			withPolicyPriority(withExclude({
+				name: AUTO.AI,
+				type: "smart",
+				proxies: [],
+				"include-all": true,
+				icon: icon("ChatGPT.png"),
+				...SETTINGS.SMART_EXTRA,
+				...EMPTY_FALLBACK
+			}, EXCLUDE_AI), policyPriority),
+			withExclude({
+				name: GROUPS.AI,
+				type: "select",
+				proxies: [AUTO.AI],
+				"include-all": true,
+				"default-selected": AUTO.AI,
+				icon: icon("ChatGPT.png")
+			}, EXCLUDE_AI),
+			{
+				name: GROUPS.ADBLOCK,
+				type: "select",
+				proxies: [
+					"REJECT",
+					"DIRECT",
+					GROUPS.ALL
+				],
+				icon: icon("AdBlack.png")
+			}
+		];
 	};
-	function simpleMain(config) {
+	function smartMain(config) {
 		config = config && typeof config === "object" ? config : {};
 		const originalProxies = Array.isArray(config.proxies) ? config.proxies : [];
 		const existingRules = Array.isArray(config.rules) ? config.rules : [];
@@ -747,8 +777,8 @@ var __mihomoSimple = (function(exports) {
 		};
 		config.rules = mergeRules(STATIC_RULES, pickDirectRules(existingRules));
 		makeProxyNamesUnique(originalProxies);
-		config["proxy-groups"] = buildSimpleProxyGroups(buildProxyPools(originalProxies));
 		if (originalProxies.length) config.proxies = originalProxies;
+		config["proxy-groups"] = buildSmartProxyGroups(hasProxySource(config), "");
 		applyRuntime(config);
 		applySniffer(config);
 		applyTun(config);
@@ -756,11 +786,11 @@ var __mihomoSimple = (function(exports) {
 		return config;
 	}
 	//#endregion
-	exports.main = simpleMain;
+	exports.main = smartMain;
 	return exports;
 })({});
 // 宿主入口桥接：脚本被求值后直接调用顶层 main
 // （Sparkle / Clash Verge Rev 传 (config, profileName)，FlClash 只传 config）
 function main(config, profileName) {
-	return __mihomoSimple.main(config, profileName);
+	return __mihomoBettboxSmart.main(config, profileName);
 }
