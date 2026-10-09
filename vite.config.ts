@@ -166,27 +166,36 @@ const SMART = {
   entry: "src/smart.ts",
   name: "__mihomoBettboxSmart",
   fileName: "bettbox-smart.js",
-  banner: `/**
+  banner: `const Compatible_With_Bettbox = { ruleOptionsEnable: true };
+/**
  * bettbox-smart — Bettbox 智能选路版覆写脚本 v3.0
  * ------------------------------------------------------------------
- * 布局与 flclash-mobile 相同的三个极简策略组，但两个隐藏自动组改用
- * Bettbox 内核的 smart 类型，按真实连接质量打分选路：
+ * 与 bettbox-flclash 相同的完整分流布局（Google / YouTube / AI /
+ * Telegram / Steam / Apple / Microsoft / Spotify + 地区分组
+ * HK/TW/JP/SG/KR/US/EU/AU/AS + Bettbox 可视化开关），唯一区别：
+ * 所有隐藏自动选路组由 url-test 换成 Bettbox 内核的 smart 类型，
+ * 按真实连接质量打分选路：
  *
- *   智能选路    —— 全部节点（首响应延迟 / 重传 / 失败与站点记忆动态选优）
- *   全部        —— 智能选路打头，可手动切任意节点
- *   AI 智能选路 —— 排除香港的纯净节点池（OpenAI/Claude 常封锁 HK 出口）
- *   AI          —— AI 智能选路打头，可手动切换
- *   广告拦截    —— REJECT（默认拦截）/ DIRECT / 全部 三选一
+ *   All        —— 智能选路打头（全部节点），可手动切任意节点
+ *   地区分组   —— 各地区智能选路打头，可手动切换
+ *   Other      —— 未归类节点的智能选路
+ *   AI         —— 排除香港的纯净节点池智能选路
+ *   main / GLOBAL —— 顶层入口与全局汇总
  *
- * 与 url-test 的区别：url-test 只看周期性测速延迟；smart 用真实连接
- * 的首响应延迟打分（含重传惩罚与按站点记忆），失败自动回退下一候选；
+ * smart 与 url-test 的区别：url-test 只看周期性测速延迟；smart 用真实
+ * 连接的首响应延迟打分（含重传惩罚与按站点记忆），失败自动回退下一候选；
  * 内核固定每 5 分钟重测一轮，interval 参数无效。
  * 可在 src/user-config.ts 的 POLICY_PRIORITY 中按正则给节点配优先级。
+ *
+ * ── Bettbox 可视化开关 ───────────────────────────────────────────
+ * 本脚本首行的 Compatible_With_Bettbox 声明会被 Bettbox（v1.18.8+）
+ * 自动识别，在客户端 UI 中渲染可视化配置面板，用户可直接通过开关
+ * 控制各分流策略组和地区分组的启用/禁用。
  *
  * ── 仅限 Bettbox（smart 为内核专属能力）──────────────────────────
  * 上游 mihomo 内核（FlClash / Sparkle / Clash Verge Rev 等）不支持
  * smart 组，配置校验会报 \`unsupported type: smart\`，请勿混用；
- * 需要 url-test 版本请改用 flclash-mobile.js。
+ * 需要 url-test 版本请改用 bettbox-flclash.js。
  *
  * ── 用法 ──────────────────────────────────────────────────────────
  * 设置 → 高级设置 → 脚本 → 添加 →（右上角可远程下载本脚本链接）→
@@ -203,7 +212,34 @@ const SMART = {
  * 仓库地址：https://github.com/wchiway/mihomo-proxy
  * 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-smart.js
  * 客户端：https://github.com/appshubcc/Bettbox
- */`,
+ */
+var ruleOptionsEnable = {
+  Google: true,
+  YouTube: true,
+  AI: true,
+  Telegram: true,
+  Steam: true,
+  Apple: true,
+  Microsoft: true,
+  Spotify: true,
+  广告拦截: true,
+  地区分组: true,
+  屏蔽QUIC: true,
+};
+
+var serviceConfigs = [
+  { name: "Google", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Google_Search.png" },
+  { name: "YouTube", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/YouTube.png" },
+  { name: "AI", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/ChatGPT.png" },
+  { name: "Telegram", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Telegram.png" },
+  { name: "Steam", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Steam.png" },
+  { name: "Apple", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Apple.png" },
+  { name: "Microsoft", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Microsoft.png" },
+  { name: "Spotify", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Spotify.png" },
+  { name: "广告拦截", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/AdBlack.png" },
+  { name: "地区分组", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Global.png" },
+  { name: "屏蔽QUIC", icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Reject.png" },
+];`,
 };
 
 export default defineConfig(({ mode }) => {

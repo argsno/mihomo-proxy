@@ -828,8 +828,8 @@ assertCommon("bettbox", bettbox);
 }
 
 // ============ Bettbox 智能选路版（bettbox-smart） ============
-// 与 flclash-mobile 同布局、同分流规则，仅两个隐藏自动组由 url-test
-// 改为 smart（Bettbox 内核专属类型）。
+// 与 bettbox-flclash 相同的完整分流布局与可视化开关，唯一区别：
+// 所有隐藏自动选路组由 url-test 改为 smart（Bettbox 内核专属类型）。
 const smart = runScript("bettbox-smart.js", flclashConfig(), 1);
 assertCommon("smart", smart);
 {
@@ -837,25 +837,40 @@ assertCommon("smart", smart);
   const names = groups.map((g) => g.name);
   const byName = new Map(groups.map((g) => [g.name, g]));
 
+  // 完整布局：组名与 bettbox-flclash 一一对应（隐藏自动组前缀改为智能选路）
   assert(
     JSON.stringify(names) ===
-      JSON.stringify(["智能选路", "全部", "AI 智能选路", "AI", "广告拦截"]),
-    `[smart] 策略组恰为五个（含两个隐藏智能选路组）：${names.join(" / ")}`,
+      JSON.stringify(
+        (bettbox["proxy-groups"] ?? []).map((g) =>
+          g.name.replace(/^URL Test - /, "智能选路 - "),
+        ),
+      ),
+    `[smart] 策略组与 bettbox-flclash 同布局同顺序（隐藏自动组改智能选路）：${names.join(" / ")}`,
   );
-  // 出口目标与极简版完全一致 → 与 flclash-mobile 的分流行为可直接互换验证
+  // 默认开关下出口目标与 bettbox-flclash 一致 → 分流行为可直接互换验证
   assert(
-    JSON.stringify(smart.rules) === JSON.stringify(simple.rules),
-    "[smart] 分流规则与极简版逐条相同（含出口策略组名）",
+    JSON.stringify(smart.rules) === JSON.stringify(bettbox.rules),
+    "[smart] 分流规则与 bettbox-flclash 逐条相同（含出口策略组名）",
   );
-  for (const n of ["智能选路", "全部", "AI 智能选路", "AI"]) {
-    assert(
-      byName.get(n)?.["include-all"] === true,
-      `[smart] ${n} 组启用 include-all`,
-    );
-  }
-  for (const n of ["智能选路", "AI 智能选路"]) {
+
+  const autoNames = names.filter((n) => n.startsWith("智能选路 - "));
+  assert(
+    autoNames.length === 12,
+    `[smart] 隐藏智能选路组共 12 个（All/9 地区/Other/AI）：${autoNames.join(" / ")}`,
+  );
+  assert(
+    groups.every((g) => g.type !== "url-test"),
+    "[smart] 不再生成任何 url-test 组",
+  );
+  for (const n of autoNames) {
     const g = byName.get(n);
     assert(g?.type === "smart", `[smart] ${n} 组类型为 smart`);
+    assert(g?.hidden === true, `[smart] ${n} 为隐藏自动组`);
+    assert(g?.["include-all"] === true, `[smart] ${n} 组启用 include-all`);
+    assert(
+      JSON.stringify(g?.proxies) === JSON.stringify([]),
+      `[smart] ${n} 组成员由内核运行时纳入`,
+    );
     assert(
       g?.["empty-fallback"] === "DIRECT",
       `[smart] ${n} 组空成员回退 DIRECT`,
@@ -886,20 +901,48 @@ assertCommon("smart", smart);
     badEmptyFallback.length === 0,
     `[smart] empty-fallback 未填策略组（异常：${badEmptyFallback.join(",") || "无"}）`,
   );
+
+  // select 组默认选中对应的智能选路组
+  for (const n of [
+    "All",
+    "HK",
+    "TW",
+    "JP",
+    "SG",
+    "KR",
+    "US",
+    "EU",
+    "AU",
+    "AS",
+    "Other",
+  ]) {
+    assert(
+      JSON.stringify(byName.get(n)?.proxies) ===
+        JSON.stringify([`智能选路 - ${n}`]) &&
+        byName.get(n)?.["default-selected"] === `智能选路 - ${n}`,
+      `[smart]「${n}」组以智能选路打头并默认选中`,
+    );
+  }
   assert(
-    JSON.stringify(byName.get("全部")?.proxies) ===
-      JSON.stringify(["智能选路"]),
-    "[smart]「全部」组以智能选路打头（其余节点由内核追加）",
+    byName.get("AI")?.proxies?.[0] === "智能选路 - AI" &&
+      byName.get("AI")?.["default-selected"] === "智能选路 - AI" &&
+      !byName.get("AI")?.proxies?.includes("HK"),
+    "[smart]「AI」组以智能选路打头、默认选中且不含香港地区组",
   );
   assert(
-    JSON.stringify(byName.get("AI")?.proxies) ===
-      JSON.stringify(["AI 智能选路"]),
-    "[smart]「AI」组以 AI 智能选路打头",
+    byName.get("main")?.["default-selected"] === "All" &&
+      byName.get("YouTube")?.["default-selected"] === "Google" &&
+      byName.get("Telegram")?.["default-selected"] === "Telegram - Fallback",
+    "[smart] main/YouTube/Telegram 默认选中项与 bettbox-flclash 一致",
+  );
+  assert(
+    byName.get("Telegram - Fallback")?.type === "fallback",
+    "[smart] Telegram - Fallback 保持 fallback 自愈机制",
   );
 
-  // exclude-filter 行为与 flclash-mobile 同款语义
-  const allExclude = byName.get("全部")?.["exclude-filter"];
-  const aiExclude = byName.get("AI")?.["exclude-filter"];
+  // exclude-filter 行为与 bettbox-flclash 同款语义
+  const allExclude = byName.get("智能选路 - All")?.["exclude-filter"];
+  const aiExclude = byName.get("智能选路 - AI")?.["exclude-filter"];
   assert(
     typeof allExclude === "string" && allExclude.startsWith("(?i)(?:"),
     `[smart] exclude-filter 为大小写不敏感的非捕获组：${allExclude}`,
@@ -911,11 +954,123 @@ assertCommon("smart", smart);
     "[smart] exclude-filter 排除信息类节点、放行正常节点",
   );
   assert(
-    !allRe.test("") && !allRe.test("智能选路") && !aiRe.test("AI 智能选路"),
+    !allRe.test("") &&
+      !allRe.test("智能选路 - All") &&
+      !aiRe.test("智能选路 - AI"),
     "[smart] exclude-filter 不匹配空串、不误伤自身组名",
   );
-  assert(!allRe.test("🇭🇰 香港 IEPL 01"), "[smart]「全部」组保留香港节点");
+  assert(
+    !allRe.test("🇭🇰 香港 IEPL 01"),
+    "[smart]「智能选路 - All」保留香港节点",
+  );
   assert(aiRe.test("🇭🇰 香港 IEPL 01"), "[smart] AI 组排除香港节点");
+  const hkFilter = toJsRegex(byName.get("HK")?.["filter"]);
+  assert(
+    hkFilter.test("🇭🇰 香港 IEPL 01") && !hkFilter.test("🇯🇵 日本 02 0.5x"),
+    "[smart] 地区组 filter 只放行本地区节点",
+  );
+
+  // ─── Bettbox 客户端特有机制验证（与 bettbox-flclash 同款） ───
+  const smartRawScript = readFileSync(
+    new URL("../dist/bettbox-smart.js", import.meta.url),
+    "utf8",
+  );
+  const smartHead2000 = smartRawScript.slice(0, 2000);
+  assert(
+    smartHead2000.includes("Compatible_With_Bettbox"),
+    "[smart] 前 2000 字符包含 Compatible_With_Bettbox 标识",
+  );
+
+  // 模拟 Bettbox extractScriptOptions 提取开关与图标
+  const smartExtracted = JSON.parse(
+    vm.runInNewContext(`
+    var console = { log: function() {}, warn: function() {}, error: function() {}, info: function() {}, debug: function() {} };
+    (function() {
+      ${smartRawScript}
+      var options = typeof ruleOptionsEnable !== 'undefined' && ruleOptionsEnable && typeof ruleOptionsEnable === 'object' ? ruleOptionsEnable : {};
+      var icons = {};
+      if (typeof serviceConfigs !== 'undefined' && Array.isArray(serviceConfigs)) {
+        for (var i = 0; i < serviceConfigs.length; i++) {
+          var svc = serviceConfigs[i];
+          if (svc && svc.name && typeof svc.icon === 'string') {
+            icons[svc.name] = svc.icon;
+          }
+        }
+      }
+      return JSON.stringify({ options: options, icons: icons });
+    })();
+  `),
+  );
+  for (const opt of [
+    "Google",
+    "YouTube",
+    "AI",
+    "Telegram",
+    "Steam",
+    "Apple",
+    "Microsoft",
+    "Spotify",
+    "广告拦截",
+    "地区分组",
+    "屏蔽QUIC",
+  ]) {
+    assert(
+      smartExtracted.options && smartExtracted.options[opt] === true,
+      `[smart] 提取到自定义开关: ${opt} (默认开启)`,
+    );
+    assert(
+      typeof smartExtracted.icons?.[opt] === "string" &&
+        smartExtracted.icons[opt].startsWith("https://"),
+      `[smart] 开关 ${opt} 拥有有效图标 URL: ${smartExtracted.icons?.[opt]}`,
+    );
+  }
+
+  // 模拟 Bettbox 用户切换开关并重新求值
+  // 测试场景：用户关闭 Google、YouTube、地区分组、屏蔽QUIC
+  const smartCustomOptions = {
+    Google: false,
+    YouTube: false,
+    地区分组: false,
+    屏蔽QUIC: false,
+  };
+  const smartCustomResult = vm.runInNewContext(`
+    (function() {
+      ${smartRawScript}
+      if (typeof ruleOptionsEnable !== "undefined") {
+        Object.assign(ruleOptionsEnable, ${JSON.stringify(smartCustomOptions)});
+      }
+      return main(${JSON.stringify(flclashConfig())});
+    })();
+  `);
+  const smartCustomNames = (smartCustomResult["proxy-groups"] ?? []).map(
+    (g) => g.name,
+  );
+  assert(
+    !smartCustomNames.includes("Google") &&
+      !smartCustomNames.includes("YouTube"),
+    "[smart-自定义] 关闭 Google/YouTube 开关后不生成对应策略组",
+  );
+  assert(
+    smartCustomResult.rules.some((r) => /^RULE-SET,google,main/.test(r)) &&
+      smartCustomResult.rules.some((r) => /^RULE-SET,youtube,main/.test(r)),
+    "[smart-自定义] 关闭 Google/YouTube 后对应规则回退到 main",
+  );
+  assert(
+    !smartCustomNames.includes("HK") &&
+      !smartCustomNames.includes("Other") &&
+      !smartCustomNames.some((n) => n.startsWith("智能选路 - HK")),
+    "[smart-自定义] 关闭地区分组后不生成地区组与 Other 组",
+  );
+  assert(
+    !smartCustomResult.rules.some(
+      (r) =>
+        r.includes("googleapis.com") &&
+        r.includes("DST-PORT,443") &&
+        r.includes("REJECT"),
+    ),
+    "[smart-自定义] 关闭屏蔽QUIC后未生成 QUIC 阻断规则",
+  );
+  assertRuleTargets("smart-custom", smartCustomResult);
 
   // proxy-providers 型订阅：proxies 为空但有 provider，仍按 smart 分组
   const providerOnly = runScript(
@@ -934,7 +1089,7 @@ assertCommon("smart", smart);
     1,
   );
   const providerAuto = (providerOnly["proxy-groups"] ?? []).find(
-    (g) => g.name === "智能选路",
+    (g) => g.name === "智能选路 - All",
   );
   assert(
     providerAuto?.type === "smart" && providerAuto?.["include-all"] === true,
@@ -948,11 +1103,11 @@ assertCommon("smart", smart);
     1,
   );
   const emptyAll = (emptySmart["proxy-groups"] ?? []).find(
-    (g) => g.name === "全部",
+    (g) => g.name === "All",
   );
   assert(
     emptyAll && JSON.stringify(emptyAll.proxies) === JSON.stringify(["DIRECT"]),
-    "[smart] 无节点来源时「全部」回退 DIRECT（空 proxy-providers 不误判）",
+    "[smart] 无节点来源时 All 回退 DIRECT（空 proxy-providers 不误判）",
   );
   assertRuleTargets("smart-empty", emptySmart);
 }
