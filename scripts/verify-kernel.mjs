@@ -60,6 +60,8 @@ for (const file of [
   "test-simple-empty.yaml",
   "test-flclash-empty.yaml",
   "test-bettbox-empty.yaml",
+  "test-smart.yaml",
+  "test-smart-empty.yaml",
 ]) {
   const cfg = path.join(distDir, file);
   if (!existsSync(cfg)) {
@@ -75,6 +77,17 @@ for (const file of [
     const line = out.trim().split("\n").pop();
     console.log(`✓ ${file} 内核 -t 通过：${line}`);
   } catch (e) {
+    const output = `${e.stdout || ""}${e.stderr || ""}${e.message || ""}`;
+    // smart 组是 Bettbox 内核专属类型：上游 mihomo 会以
+    // "unsupported type: smart" 拒绝配置。此时视为跳过而非失败，
+    // 换成 Bettbox 内核（或支持 smart 的构建）即可完成这两项校验。
+    if (
+      (file === "test-smart.yaml" || file === "test-smart-empty.yaml") &&
+      /unsupported type:?\s*smart/i.test(output)
+    ) {
+      console.log(`⊘ ${file} 当前内核不支持 smart 组，跳过（需 Bettbox 内核）`);
+      continue;
+    }
     console.error(
       `✗ ${file} 内核 -t 失败：\n${e.stdout || ""}${e.stderr || e.message}`,
     );

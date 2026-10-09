@@ -13,8 +13,9 @@ import { resolve } from "node:path";
  *  - 顶层作用域必须存在可调用的 `main` → 用 IIFE + footer 桥接
  *  - boa / QuickJS 均支持 90%+ 最新 ES 规范，target es2020 安全
  *
- * 四产物：默认 mode 构建完整版，`--mode simple` 极简版，
- * `--mode flclash` 手机极简版，`--mode bettbox` Bettbox 专属版。
+ * 五产物：默认 mode 构建完整版，`--mode simple` 极简版，
+ * `--mode flclash` 手机极简版，`--mode bettbox` Bettbox 专属版，
+ * `--mode smart` Bettbox 智能选路版。
  * （Vite 库模式的 IIFE 不支持多 entry，故用 mode 区分、分次构建。）
  */
 
@@ -161,6 +162,50 @@ const FLCLASH = {
  */`,
 };
 
+const SMART = {
+  entry: "src/smart.ts",
+  name: "__mihomoBettboxSmart",
+  fileName: "bettbox-smart.js",
+  banner: `/**
+ * bettbox-smart — Bettbox 智能选路版覆写脚本 v3.0
+ * ------------------------------------------------------------------
+ * 布局与 flclash-mobile 相同的三个极简策略组，但两个隐藏自动组改用
+ * Bettbox 内核的 smart 类型，按真实连接质量打分选路：
+ *
+ *   智能选路    —— 全部节点（首响应延迟 / 重传 / 失败与站点记忆动态选优）
+ *   全部        —— 智能选路打头，可手动切任意节点
+ *   AI 智能选路 —— 排除香港的纯净节点池（OpenAI/Claude 常封锁 HK 出口）
+ *   AI          —— AI 智能选路打头，可手动切换
+ *   广告拦截    —— REJECT（默认拦截）/ DIRECT / 全部 三选一
+ *
+ * 与 url-test 的区别：url-test 只看周期性测速延迟；smart 用真实连接
+ * 的首响应延迟打分（含重传惩罚与按站点记忆），失败自动回退下一候选；
+ * 内核固定每 5 分钟重测一轮，interval 参数无效。
+ * 可在 src/user-config.ts 的 POLICY_PRIORITY 中按正则给节点配优先级。
+ *
+ * ── 仅限 Bettbox（smart 为内核专属能力）──────────────────────────
+ * 上游 mihomo 内核（FlClash / Sparkle / Clash Verge Rev 等）不支持
+ * smart 组，配置校验会报 \`unsupported type: smart\`，请勿混用；
+ * 需要 url-test 版本请改用 flclash-mobile.js。
+ *
+ * ── 用法 ──────────────────────────────────────────────────────────
+ * 设置 → 高级设置 → 脚本 → 添加 →（右上角可远程下载本脚本链接）→
+ * 保存；再到 配置 → 对应订阅 → 覆写 → 模式选「脚本」→ 勾选本脚本。
+ *
+ * ── 必须在 App 内正确的设置（脚本无法覆盖，会被 App 强制改写）────
+ *  1. 设置 → 网络 →「覆写 DNS」保持【关闭】
+ *  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
+ *  3. 出站模式选「规则」；TUN 栈选 mixed；
+ *     「查找进程」建议设为 off
+ *
+ * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
+ *
+ * 仓库地址：https://github.com/wchiway/mihomo-proxy
+ * 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-smart.js
+ * 客户端：https://github.com/appshubcc/Bettbox
+ */`,
+};
+
 export default defineConfig(({ mode }) => {
   const variant =
     mode === "simple"
@@ -169,7 +214,9 @@ export default defineConfig(({ mode }) => {
         ? FLCLASH
         : mode === "bettbox"
           ? BETTBOX
-          : FULL;
+          : mode === "smart"
+            ? SMART
+            : FULL;
   return {
     build: {
       lib: {
@@ -182,7 +229,11 @@ export default defineConfig(({ mode }) => {
       minify: false, // 保持产物可读、便于用户审计
       outDir: "dist",
       // 完整版先构建并清空 dist，极简版 / 手机版随后追加
-      emptyOutDir: mode !== "simple" && mode !== "flclash" && mode !== "bettbox",
+      emptyOutDir:
+        mode !== "simple" &&
+        mode !== "flclash" &&
+        mode !== "bettbox" &&
+        mode !== "smart",
       rolldownOptions: {
         output: {
           banner: variant.banner,

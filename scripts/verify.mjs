@@ -177,7 +177,7 @@ const assertCommon = (tag, result) => {
 
   // 健康检查锁定 204：默认 `*` 会把门户劫持的 200 页面当成节点可用
   const healthGroups = (result["proxy-groups"] ?? []).filter((g) =>
-    ["url-test", "fallback", "load-balance"].includes(g.type),
+    ["url-test", "fallback", "load-balance", "smart"].includes(g.type),
   );
   assert(
     healthGroups.length > 0 &&
@@ -827,6 +827,136 @@ assertCommon("bettbox", bettbox);
   assertRuleTargets("bettbox-custom", customResult);
 }
 
+// ============ Bettbox 智能选路版（bettbox-smart） ============
+// 与 flclash-mobile 同布局、同分流规则，仅两个隐藏自动组由 url-test
+// 改为 smart（Bettbox 内核专属类型）。
+const smart = runScript("bettbox-smart.js", flclashConfig(), 1);
+assertCommon("smart", smart);
+{
+  const groups = smart["proxy-groups"] ?? [];
+  const names = groups.map((g) => g.name);
+  const byName = new Map(groups.map((g) => [g.name, g]));
+
+  assert(
+    JSON.stringify(names) ===
+      JSON.stringify(["智能选路", "全部", "AI 智能选路", "AI", "广告拦截"]),
+    `[smart] 策略组恰为五个（含两个隐藏智能选路组）：${names.join(" / ")}`,
+  );
+  // 出口目标与极简版完全一致 → 与 flclash-mobile 的分流行为可直接互换验证
+  assert(
+    JSON.stringify(smart.rules) === JSON.stringify(simple.rules),
+    "[smart] 分流规则与极简版逐条相同（含出口策略组名）",
+  );
+  for (const n of ["智能选路", "全部", "AI 智能选路", "AI"]) {
+    assert(
+      byName.get(n)?.["include-all"] === true,
+      `[smart] ${n} 组启用 include-all`,
+    );
+  }
+  for (const n of ["智能选路", "AI 智能选路"]) {
+    const g = byName.get(n);
+    assert(g?.type === "smart", `[smart] ${n} 组类型为 smart`);
+    assert(
+      g?.["empty-fallback"] === "DIRECT",
+      `[smart] ${n} 组空成员回退 DIRECT`,
+    );
+    // smart 组内核固定 5 分钟重测、择优范围由内核优选集合决定：
+    // 不写 interval / tolerance，避免在配置里造成"参数生效"的误解
+    assert(
+      g?.interval === undefined && g?.tolerance === undefined,
+      `[smart] ${n} 组不写 interval/tolerance（内核固定 5 分钟重测）`,
+    );
+    assert(
+      g?.lazy === true && g?.["expected-status"] === 204,
+      `[smart] ${n} 组 lazy + expected-status 204`,
+    );
+    // 默认 POLICY_PRIORITY 为空：不下发空字段（空值会被内核判为非法）
+    assert(
+      g?.["policy-priority"] === undefined,
+      `[smart] ${n} 组未配置 policy-priority 时不写字段`,
+    );
+  }
+  // empty-fallback 只接受 proxy 名，填策略组会被内核直接判错
+  const groupNameSet = new Set(names);
+  const badEmptyFallback = groups
+    .filter((g) => g["empty-fallback"])
+    .filter((g) => groupNameSet.has(g["empty-fallback"]))
+    .map((g) => g.name);
+  assert(
+    badEmptyFallback.length === 0,
+    `[smart] empty-fallback 未填策略组（异常：${badEmptyFallback.join(",") || "无"}）`,
+  );
+  assert(
+    JSON.stringify(byName.get("全部")?.proxies) ===
+      JSON.stringify(["智能选路"]),
+    "[smart]「全部」组以智能选路打头（其余节点由内核追加）",
+  );
+  assert(
+    JSON.stringify(byName.get("AI")?.proxies) ===
+      JSON.stringify(["AI 智能选路"]),
+    "[smart]「AI」组以 AI 智能选路打头",
+  );
+
+  // exclude-filter 行为与 flclash-mobile 同款语义
+  const allExclude = byName.get("全部")?.["exclude-filter"];
+  const aiExclude = byName.get("AI")?.["exclude-filter"];
+  assert(
+    typeof allExclude === "string" && allExclude.startsWith("(?i)(?:"),
+    `[smart] exclude-filter 为大小写不敏感的非捕获组：${allExclude}`,
+  );
+  const allRe = toJsRegex(allExclude);
+  const aiRe = toJsRegex(aiExclude);
+  assert(
+    allRe.test("剩余流量：100GB") && !allRe.test("🇯🇵 日本 02 0.5x"),
+    "[smart] exclude-filter 排除信息类节点、放行正常节点",
+  );
+  assert(
+    !allRe.test("") && !allRe.test("智能选路") && !aiRe.test("AI 智能选路"),
+    "[smart] exclude-filter 不匹配空串、不误伤自身组名",
+  );
+  assert(!allRe.test("🇭🇰 香港 IEPL 01"), "[smart]「全部」组保留香港节点");
+  assert(aiRe.test("🇭🇰 香港 IEPL 01"), "[smart] AI 组排除香港节点");
+
+  // proxy-providers 型订阅：proxies 为空但有 provider，仍按 smart 分组
+  const providerOnly = runScript(
+    "bettbox-smart.js",
+    {
+      proxies: [],
+      "proxy-providers": {
+        airport: {
+          type: "http",
+          url: "https://example.invalid/sub",
+          path: "./providers/airport.yaml",
+          interval: 3600,
+        },
+      },
+    },
+    1,
+  );
+  const providerAuto = (providerOnly["proxy-groups"] ?? []).find(
+    (g) => g.name === "智能选路",
+  );
+  assert(
+    providerAuto?.type === "smart" && providerAuto?.["include-all"] === true,
+    "[smart] 仅 proxy-providers 的订阅仍按 include-all + smart 分组",
+  );
+
+  // 零节点边界：注入的空 proxy-providers {} 不能被当成有节点
+  const emptySmart = runScript(
+    "bettbox-smart.js",
+    { "proxy-providers": {} },
+    1,
+  );
+  const emptyAll = (emptySmart["proxy-groups"] ?? []).find(
+    (g) => g.name === "全部",
+  );
+  assert(
+    emptyAll && JSON.stringify(emptyAll.proxies) === JSON.stringify(["DIRECT"]),
+    "[smart] 无节点来源时「全部」回退 DIRECT（空 proxy-providers 不误判）",
+  );
+  assertRuleTargets("smart-empty", emptySmart);
+}
+
 // ============ 导出内核校验用 YAML + 同步产物 ============
 if (failed) {
   console.error("\n验证失败，产物未复制到仓库根目录。");
@@ -870,6 +1000,18 @@ if (failed) {
       { lineWidth: -1 },
     ),
   );
+  // smart 为 Bettbox 内核专属类型：上游内核校验脚本会识别
+  // "unsupported type: smart" 并跳过这两个文件
+  writeFileSync(
+    new URL("../dist/test-smart.yaml", import.meta.url),
+    yaml.dump(smart, { lineWidth: -1 }),
+  );
+  writeFileSync(
+    new URL("../dist/test-smart-empty.yaml", import.meta.url),
+    yaml.dump(runScript("bettbox-smart.js", { "proxy-providers": {} }, 1), {
+      lineWidth: -1,
+    }),
+  );
   copyFileSync(
     new URL("../dist/mihomo-proxy.js", import.meta.url),
     new URL("../mihomo-proxy.js", import.meta.url),
@@ -885,6 +1027,10 @@ if (failed) {
   copyFileSync(
     new URL("../dist/bettbox-flclash.js", import.meta.url),
     new URL("../bettbox-flclash.js", import.meta.url),
+  );
+  copyFileSync(
+    new URL("../dist/bettbox-smart.js", import.meta.url),
+    new URL("../bettbox-smart.js", import.meta.url),
   );
   console.log(
     "\n全部通过：产物已同步到仓库根目录，内核校验 YAML 已导出到 dist/。",

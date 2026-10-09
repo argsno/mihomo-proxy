@@ -27,3 +27,15 @@ export const CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3
  * 置 false：节点确认支持 UDP 且质量良好时可关闭，让 QUIC 正常工作。
  */
 export const BLOCK_GOOGLE_QUIC = true;
+
+/**
+ * smart 组节点优先级（仅 bettbox-smart 变体生效；留空表示不设置）。
+ *
+ * 格式 "正则:系数;正则:系数"，对节点名做正则匹配，第一个命中的规则生效；
+ * 系数小于 1 提升优先级、大于 1 降低优先级（默认 1.0），必须为正数。
+ *
+ * 示例：'Premium:0.9;备用:1.3'
+ *   - 节点名含 Premium 的乘 0.9（更容易被选中）
+ *   - 节点名含 备用 的乘 1.3（更少被选中）
+ */
+export const POLICY_PRIORITY = "";
