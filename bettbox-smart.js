@@ -1,24 +1,33 @@
+const Compatible_With_Bettbox = { ruleOptionsEnable: true };
 /**
 * bettbox-smart — Bettbox 智能选路版覆写脚本 v3.0
 * ------------------------------------------------------------------
-* 布局与 flclash-mobile 相同的三个极简策略组，但两个隐藏自动组改用
-* Bettbox 内核的 smart 类型，按真实连接质量打分选路：
+* 与 bettbox-flclash 相同的完整分流布局（Google / YouTube / AI /
+* Telegram / Steam / Apple / Microsoft / Spotify + 地区分组
+* HK/TW/JP/SG/KR/US/EU/AU/AS + Bettbox 可视化开关），唯一区别：
+* 所有隐藏自动选路组由 url-test 换成 Bettbox 内核的 smart 类型，
+* 按真实连接质量打分选路：
 *
-*   智能选路    —— 全部节点（首响应延迟 / 重传 / 失败与站点记忆动态选优）
-*   全部        —— 智能选路打头，可手动切任意节点
-*   AI 智能选路 —— 排除香港的纯净节点池（OpenAI/Claude 常封锁 HK 出口）
-*   AI          —— AI 智能选路打头，可手动切换
-*   广告拦截    —— REJECT（默认拦截）/ DIRECT / 全部 三选一
+*   All        —— 智能选路打头（全部节点），可手动切任意节点
+*   地区分组   —— 各地区智能选路打头，可手动切换
+*   Other      —— 未归类节点的智能选路
+*   AI         —— 排除香港的纯净节点池智能选路
+*   main / GLOBAL —— 顶层入口与全局汇总
 *
-* 与 url-test 的区别：url-test 只看周期性测速延迟；smart 用真实连接
-* 的首响应延迟打分（含重传惩罚与按站点记忆），失败自动回退下一候选；
+* smart 与 url-test 的区别：url-test 只看周期性测速延迟；smart 用真实
+* 连接的首响应延迟打分（含重传惩罚与按站点记忆），失败自动回退下一候选；
 * 内核固定每 5 分钟重测一轮，interval 参数无效。
 * 可在 src/user-config.ts 的 POLICY_PRIORITY 中按正则给节点配优先级。
+*
+* ── Bettbox 可视化开关 ───────────────────────────────────────────
+* 本脚本首行的 Compatible_With_Bettbox 声明会被 Bettbox（v1.18.8+）
+* 自动识别，在客户端 UI 中渲染可视化配置面板，用户可直接通过开关
+* 控制各分流策略组和地区分组的启用/禁用。
 *
 * ── 仅限 Bettbox（smart 为内核专属能力）──────────────────────────
 * 上游 mihomo 内核（FlClash / Sparkle / Clash Verge Rev 等）不支持
 * smart 组，配置校验会报 `unsupported type: smart`，请勿混用；
-* 需要 url-test 版本请改用 flclash-mobile.js。
+* 需要 url-test 版本请改用 bettbox-flclash.js。
 *
 * ── 用法 ──────────────────────────────────────────────────────────
 * 设置 → 高级设置 → 脚本 → 添加 →（右上角可远程下载本脚本链接）→
@@ -36,6 +45,65 @@
 * 脚本链接：https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-smart.js
 * 客户端：https://github.com/appshubcc/Bettbox
 */
+var ruleOptionsEnable = {
+	Google: true,
+	YouTube: true,
+	AI: true,
+	Telegram: true,
+	Steam: true,
+	Apple: true,
+	Microsoft: true,
+	Spotify: true,
+	广告拦截: true,
+	地区分组: true,
+	屏蔽QUIC: true
+};
+var serviceConfigs = [
+	{
+		name: "Google",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Google_Search.png"
+	},
+	{
+		name: "YouTube",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/YouTube.png"
+	},
+	{
+		name: "AI",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/ChatGPT.png"
+	},
+	{
+		name: "Telegram",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Telegram.png"
+	},
+	{
+		name: "Steam",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Steam.png"
+	},
+	{
+		name: "Apple",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Apple.png"
+	},
+	{
+		name: "Microsoft",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Microsoft.png"
+	},
+	{
+		name: "Spotify",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Spotify.png"
+	},
+	{
+		name: "广告拦截",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/AdBlack.png"
+	},
+	{
+		name: "地区分组",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Global.png"
+	},
+	{
+		name: "屏蔽QUIC",
+		icon: "https://fastly.jsdelivr.net/gh/Koolson/Qure@master/IconSet/Color/Reject.png"
+	}
+];
 var __mihomoBettboxSmart = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	//#region src/user-config.ts
@@ -591,53 +659,124 @@ var __mihomoBettboxSmart = (function(exports) {
 	};
 	//#endregion
 	//#region src/smart-main.ts
+	/** 默认开关配置 */
+	var DEFAULT_RULE_OPTIONS = {
+		Google: true,
+		YouTube: true,
+		AI: true,
+		Telegram: true,
+		Steam: true,
+		Apple: true,
+		Microsoft: true,
+		Spotify: true,
+		广告拦截: true,
+		地区分组: true,
+		屏蔽QUIC: true
+	};
 	/**
-	* Bettbox 智能选路版覆写脚本（bettbox-smart）
-	* ------------------------------------------------------------------
-	* 布局与 flclash-mobile 完全一致（三个极简策略组 + include-all 运行时
-	* 纳入节点），仅两个隐藏自动组改用 Bettbox 内核的 smart 类型：
-	*
-	*   smart 组按真实连接质量打分选路 —— 首响应延迟 EWMA + 重传惩罚
-	*   （1% ≈ 50ms）+ 失败降权 + 按站点记忆，失败时按优选集合 / 健康节点 /
-	*   失败节点的顺序自动回退；内核固定每 5 分钟重测一轮。
-	*   url-test 只看周期性测速延迟，感知不到真实连接质量，这是二者的核心差异。
-	*
-	*   智能选路    —— 全部节点（默认选优，后台按真实连接自动打分）
-	*   全部        —— 智能选路打头，可手动切任意节点
-	*   AI 智能选路 —— 排除香港的纯净节点池（OpenAI/Claude 常封锁 HK 出口）
-	*   AI          —— AI 智能选路打头，可手动切换
-	*   广告拦截    —— REJECT（默认拦截）/ DIRECT / 全部 三选一
-	*
-	* 注意：smart 组是 Bettbox 内核专属能力，上游 mihomo 内核（FlClash /
-	* Sparkle / Clash Verge Rev 等）会因 `unsupported type: smart` 校验失败。
+	* 动态获取 Bettbox 规则开关配置。
+	* 优先读取宿主环境中注入的词法/全局作用域 ruleOptionsEnable（经用户自定义设置覆盖后的值），
+	* 未设置的项回退至 DEFAULT_RULE_OPTIONS。
 	*/
-	/** 三个策略组的名称（规则出口统一引用这里，避免魔法字符串） */
+	function getRuleOptions() {
+		let hostOptions;
+		try {
+			if (typeof ruleOptionsEnable !== "undefined" && ruleOptionsEnable && typeof ruleOptionsEnable === "object") hostOptions = ruleOptionsEnable;
+		} catch {}
+		if (!hostOptions && typeof globalThis !== "undefined") {
+			const g = globalThis;
+			if (g.ruleOptionsEnable && typeof g.ruleOptionsEnable === "object") hostOptions = g.ruleOptionsEnable;
+		}
+		return {
+			...DEFAULT_RULE_OPTIONS,
+			...hostOptions || {}
+		};
+	}
 	var GROUPS = {
-		ALL: "全部",
+		MAIN: "main",
+		ALL: "All",
 		AI: "AI",
-		ADBLOCK: "广告拦截"
+		GOOGLE: "Google",
+		YOUTUBE: "YouTube",
+		TELEGRAM: "Telegram",
+		STEAM: "Steam",
+		APPLE: "Apple",
+		MICROSOFT: "Microsoft",
+		SPOTIFY: "Spotify",
+		ADBLOCK: "广告拦截",
+		GLOBAL: "GLOBAL",
+		OTHER: "Other"
 	};
-	/** 两个隐藏的自动选路组（供上面的 select 组引用） */
-	var AUTO = {
-		ALL: "智能选路",
-		AI: "AI 智能选路"
-	};
-	/** 香港节点识别（AI 组需剔除，OpenAI/Claude 等常封锁 HK 出口） */
+	/** 隐藏智能选路组名前缀（对应 bettbox-flclash 的 "URL Test - "） */
+	var SMART_PREFIX = "智能选路 - ";
+	/**
+	* 地区定义与 filter 正则
+	* 使用 (?i)(?:pattern1|pattern2) 语法统一包裹。
+	*/
+	var REGION_DEFS = [
+		{
+			name: "HK",
+			filter: "(?i)(?:香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰)",
+			icon: "Hong_Kong.png"
+		},
+		{
+			name: "TW",
+			filter: "(?i)(?:台湾|台北|新北|TW|TWN|TAIWAN|TAIPEI|🇹🇼)",
+			icon: "Taiwan.png"
+		},
+		{
+			name: "JP",
+			filter: "(?i)(?:日本|东京|大阪|JP|JPN|JAPAN|TOKYO|OSAKA|🇯🇵)",
+			icon: "Japan.png"
+		},
+		{
+			name: "SG",
+			filter: "(?i)(?:新加坡|狮城|SG|SGP|SINGAPORE|🇸🇬)",
+			icon: "Singapore.png"
+		},
+		{
+			name: "KR",
+			filter: "(?i)(?:韩国|首尔|KR|KOR|KOREA|SEOUL|🇰🇷)",
+			icon: "Korea.png"
+		},
+		{
+			name: "US",
+			filter: "(?i)(?:美国|纽约|旧金山|洛杉矶|西雅图|芝加哥|US|USA|NEW YORK|SAN FRANCISCO|LOS ANGELES|SEATTLE|CHICAGO|🇺🇸)",
+			icon: "United_States.png"
+		},
+		{
+			name: "EU",
+			filter: "(?i)(?:欧洲|德国|法国|英国|荷兰|俄罗斯|意大利|西班牙|瑞典|瑞士|波兰|芬兰|土耳其|爱尔兰|奥地利|法兰克福|伦敦|EU|DE|FR|UK|GB|NL|RU|IT|ES|SE|CH|PL|FI|TR|IE|AT|GERMANY|FRANCE|LONDON|FRANKFURT|🇪🇺|🇩🇪|🇫🇷|🇬🇧|🇳🇱|🇷🇺|🇮🇹|🇪🇸|🇸🇪|🇨🇭|🇵🇱|🇫🇮|🇹🇷|🇮🇪|🇦🇹|🇧🇪)",
+			icon: "European_Union.png"
+		},
+		{
+			name: "AU",
+			filter: "(?i)(?:澳大利亚|澳洲|悉尼|墨尔本|AU|AUS|AUSTRALIA|SYDNEY|MELBOURNE|🇦🇺)",
+			icon: "Australia.png"
+		},
+		{
+			name: "AS",
+			filter: "(?i)(?:越南|泰国|马来西亚|印尼|菲律宾|印度|VN|TH|MY|ID|PH|IN|VIETNAM|THAILAND|MALAYSIA|INDONESIA|PHILIPPINES|MANILA|🇻🇳|🇹🇭|🇲🇾|🇮🇩|🇵🇭|🇮🇳)",
+			icon: "Asia_Map.png"
+		}
+	];
+	/** 地区展示顺序（与 settings.ts REGION_ORDER 一致） */
+	var REGION_ORDER = [
+		"HK",
+		"TW",
+		"JP",
+		"SG",
+		"KR",
+		"US",
+		"EU",
+		"AU",
+		"AS"
+	];
+	/** 香港节点识别（AI 组需剔除香港出口） */
 	var HK_FILTER = /香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰/i;
-	var STATIC_RULES = buildStaticRules({
-		adblock: GROUPS.ADBLOCK,
-		ai: GROUPS.AI,
-		google: GROUPS.ALL,
-		youtube: GROUPS.ALL,
-		telegram: GROUPS.ALL,
-		steam: GROUPS.ALL,
-		apple: GROUPS.ALL,
-		microsoft: GROUPS.ALL,
-		proxy: GROUPS.ALL
-	});
 	/**
 	* 取正则源码，空正则返回 ""。
-	* 空 RegExp 的 source 是 "(?:)"，直接拼进过滤器会匹配空串导致所有节点被排除。
+	* 空 RegExp 的 source 是 "(?:)"，直接拼入过滤器会匹配空串导致所有节点被排除。
 	*/
 	var filterSource = (re) => {
 		const src = re && re.source ? String(re.source) : "";
@@ -660,22 +799,48 @@ var __mihomoBettboxSmart = (function(exports) {
 		...group,
 		"exclude-filter": filter
 	} : group;
-	/** 仅在用户配置了 policy-priority 时写入字段（空字符串会被内核判为非法值） */
-	var withPolicyPriority = (group, policyPriority) => policyPriority.trim() ? {
-		...group,
-		"policy-priority": policyPriority
-	} : group;
+	/**
+	* 为 include-all 组同时设置 filter（地区白名单）和 exclude-filter（信息节点黑名单）。
+	*/
+	var withFilters = (group, includeFilter, excludeFilter) => {
+		const result = { ...group };
+		if (includeFilter) result.filter = includeFilter;
+		if (excludeFilter) result["exclude-filter"] = excludeFilter;
+		return result;
+	};
 	/**
 	* include-all 组的空成员兜底（empty-fallback）。
 	* 过滤后空组显式回退至 DIRECT，避免 UI 显示含混的 COMPATIBLE。
 	*/
 	var EMPTY_FALLBACK = { "empty-fallback": "DIRECT" };
 	/**
-	* 订阅是否提供了节点来源。
-	* proxies 与 proxy-providers 任一非空即可 —— provider 为 http 类型时
-	* 配置校验阶段尚未下载，节点数为 0 属正常，不能据此判空。
-	* 注：Bettbox / FlClash 在调用脚本前会把缺失的 proxy-providers 补成 {}，
-	* 所以这里必须判 key 数量而不是判是否存在。
+	* 仅在用户配置了 policy-priority 时写入字段（空字符串会被内核判为非法值）。
+	* smart 组按正则给节点配优先级（系数 <1 提升、>1 降低），仅对 smart 组生效。
+	*/
+	var withPolicyPriority = (group, policyPriority) => policyPriority.trim() ? {
+		...group,
+		"policy-priority": policyPriority
+	} : group;
+	/**
+	* 根据 SmartRuleOptions 构建分流规则出口。
+	* 当某个服务的开关为 false 时，该服务的流量平滑回退到 main 组。
+	*/
+	var buildRuleTargets = (options) => ({
+		adblock: options.广告拦截 ? GROUPS.ADBLOCK : "REJECT",
+		ai: options.AI ? GROUPS.AI : GROUPS.MAIN,
+		google: options.Google ? GROUPS.GOOGLE : GROUPS.MAIN,
+		youtube: options.YouTube ? GROUPS.YOUTUBE : GROUPS.MAIN,
+		telegram: options.Telegram ? GROUPS.TELEGRAM : GROUPS.MAIN,
+		steam: options.Steam ? GROUPS.STEAM : GROUPS.MAIN,
+		apple: options.Apple ? GROUPS.APPLE : GROUPS.MAIN,
+		microsoft: options.Microsoft ? GROUPS.MICROSOFT : GROUPS.MAIN,
+		spotify: options.Spotify ? GROUPS.SPOTIFY : GROUPS.MAIN,
+		proxy: GROUPS.MAIN,
+		blockQuic: options.屏蔽QUIC
+	});
+	/**
+	* 订阅是否提供了可用节点来源。
+	* FlClash/Bettbox 在调用脚本前会将缺失的 proxy-providers 补成 {}，故必须判断 key 数量。
 	*/
 	var hasProxySource = (cfg) => {
 		const proxies = Array.isArray(cfg.proxies) ? cfg.proxies : [];
@@ -686,99 +851,285 @@ var __mihomoBettboxSmart = (function(exports) {
 	/**
 	* 构建策略组（导出供单测直接断言）。
 	*
-	* include-all 的内核语义与过滤时机同 flclash-mobile：
-	* 组成员由内核在 GroupBase.GetProxies 里按 exclude-filter 过滤后得到，
+	* include-all 的内核语义与过滤时机同 bettbox-flclash：
+	* 组成员由内核在 GroupBase.GetProxies 里 filter/exclude-filter 过滤后得到，
 	* 这里只声明空成员兜底与默认选中项。
 	*/
-	var buildSmartProxyGroups = (hasNodes, policyPriority = "") => {
+	var buildSmartProxyGroups = (hasNodes, options = DEFAULT_RULE_OPTIONS, policyPriority = "") => {
 		const icon = (f) => SETTINGS.ICON_BASE + f;
-		if (!hasNodes) return [
-			{
+		const enableRegion = options.地区分组;
+		/**
+		* 隐藏智能选路组通用构造：smart 类型 + 内核固定 5 分钟重测
+		* （不写 interval/tolerance）+ 空成员兜底 + 用户级节点优先级。
+		*/
+		const smartAuto = (name, iconFile) => withPolicyPriority({
+			name,
+			type: "smart",
+			proxies: [],
+			"include-all": true,
+			icon: icon(iconFile),
+			...SETTINGS.SMART_EXTRA,
+			...EMPTY_FALLBACK
+		}, policyPriority);
+		if (!hasNodes) {
+			const fallback = [{
+				name: GROUPS.MAIN,
+				type: "select",
+				proxies: ["DIRECT"],
+				icon: icon("Available.png")
+			}, {
 				name: GROUPS.ALL,
 				type: "select",
 				proxies: ["DIRECT"],
-				icon: icon("Global.png")
-			},
-			{
+				icon: icon("Auto.png")
+			}];
+			if (options.AI) fallback.push({
 				name: GROUPS.AI,
 				type: "select",
-				proxies: [GROUPS.ALL],
+				proxies: [GROUPS.MAIN],
 				icon: icon("ChatGPT.png")
-			},
-			{
+			});
+			if (options.Google) fallback.push({
+				name: GROUPS.GOOGLE,
+				type: "select",
+				proxies: [GROUPS.MAIN],
+				icon: icon("Google_Search.png")
+			});
+			if (options.YouTube) fallback.push({
+				name: GROUPS.YOUTUBE,
+				type: "select",
+				proxies: [GROUPS.MAIN],
+				icon: icon("YouTube.png")
+			});
+			if (options.Telegram) fallback.push({
+				name: GROUPS.TELEGRAM,
+				type: "select",
+				proxies: [GROUPS.MAIN],
+				icon: icon("Telegram.png")
+			});
+			if (options.Steam) fallback.push({
+				name: GROUPS.STEAM,
+				type: "select",
+				proxies: [GROUPS.MAIN, "DIRECT"],
+				icon: icon("Steam.png")
+			});
+			if (options.Apple) fallback.push({
+				name: GROUPS.APPLE,
+				type: "select",
+				proxies: [GROUPS.MAIN, "DIRECT"],
+				icon: icon("Apple.png")
+			});
+			if (options.Microsoft) fallback.push({
+				name: GROUPS.MICROSOFT,
+				type: "select",
+				proxies: [GROUPS.MAIN, "DIRECT"],
+				icon: icon("Microsoft.png")
+			});
+			if (options.Spotify) fallback.push({
+				name: GROUPS.SPOTIFY,
+				type: "select",
+				proxies: [GROUPS.MAIN],
+				icon: icon("Spotify.png")
+			});
+			if (options.广告拦截) fallback.push({
 				name: GROUPS.ADBLOCK,
 				type: "select",
 				proxies: [
 					"REJECT",
 					"DIRECT",
-					GROUPS.ALL
+					GROUPS.MAIN
 				],
 				icon: icon("AdBlack.png")
-			}
-		];
-		return [
-			withPolicyPriority(withExclude({
-				name: AUTO.ALL,
-				type: "smart",
-				proxies: [],
-				"include-all": true,
-				icon: icon("Auto.png"),
-				...SETTINGS.SMART_EXTRA,
-				...EMPTY_FALLBACK
-			}, EXCLUDE_COMMON), policyPriority),
-			withExclude({
-				name: GROUPS.ALL,
+			});
+			fallback.push({
+				name: GROUPS.GLOBAL,
 				type: "select",
-				proxies: [AUTO.ALL],
-				"include-all": true,
-				"default-selected": AUTO.ALL,
+				proxies: [GROUPS.MAIN, "DIRECT"],
 				icon: icon("Global.png")
-			}, EXCLUDE_COMMON),
-			withPolicyPriority(withExclude({
-				name: AUTO.AI,
-				type: "smart",
-				proxies: [],
+			});
+			return fallback;
+		}
+		const groups = [];
+		groups.push(withExclude(smartAuto(`${SMART_PREFIX}All`, "Auto.png"), EXCLUDE_COMMON));
+		groups.push(withExclude({
+			name: GROUPS.ALL,
+			type: "select",
+			proxies: [`${SMART_PREFIX}All`],
+			"include-all": true,
+			"default-selected": `${SMART_PREFIX}All`,
+			icon: icon("Auto.png")
+		}, EXCLUDE_COMMON));
+		const regionNames = [];
+		if (enableRegion) for (const rName of REGION_ORDER) {
+			const def = REGION_DEFS.find((r) => r.name === rName);
+			if (!def) continue;
+			groups.push(withFilters(smartAuto(`${SMART_PREFIX}${def.name}`, def.icon), def.filter, EXCLUDE_COMMON));
+			groups.push(withFilters({
+				name: def.name,
+				type: "select",
+				proxies: [`${SMART_PREFIX}${def.name}`],
 				"include-all": true,
-				icon: icon("ChatGPT.png"),
-				...SETTINGS.SMART_EXTRA,
-				...EMPTY_FALLBACK
-			}, EXCLUDE_AI), policyPriority),
-			withExclude({
+				"default-selected": `${SMART_PREFIX}${def.name}`,
+				icon: icon(def.icon)
+			}, def.filter, EXCLUDE_COMMON));
+			regionNames.push(def.name);
+		}
+		if (enableRegion) {
+			const allRegionPatterns = REGION_DEFS.map((r) => r.filter.replace(/^\(\?i\)\(\?:/, "").replace(/\)$/, "")).join("|");
+			const otherExclude = EXCLUDE_COMMON ? `(?i)(?:${EXCLUDE_COMMON.replace(/^\(\?i\)\(\?:/, "").replace(/\)$/, "")}|${allRegionPatterns})` : `(?i)(?:${allRegionPatterns})`;
+			groups.push(withExclude(smartAuto(`${SMART_PREFIX}Other`, "Available.png"), otherExclude));
+			groups.push(withExclude({
+				name: GROUPS.OTHER,
+				type: "select",
+				proxies: [`${SMART_PREFIX}Other`],
+				"include-all": true,
+				"default-selected": `${SMART_PREFIX}Other`,
+				icon: icon("Available.png")
+			}, otherExclude));
+		}
+		const mainProxies = [
+			GROUPS.ALL,
+			...regionNames,
+			...enableRegion ? [GROUPS.OTHER] : []
+		];
+		groups.push({
+			name: GROUPS.MAIN,
+			type: "select",
+			proxies: mainProxies,
+			"default-selected": GROUPS.ALL,
+			icon: icon("Available.png")
+		});
+		/** 服务组的 proxies 列表：main → 地区 → Other → DIRECT */
+		const serviceProxies = [
+			GROUPS.MAIN,
+			GROUPS.ALL,
+			...regionNames,
+			...enableRegion ? [GROUPS.OTHER] : []
+		];
+		const serviceWithDirect = [...serviceProxies, "DIRECT"];
+		if (options.AI) {
+			groups.push(withExclude(smartAuto(`${SMART_PREFIX}AI`, "ChatGPT.png"), EXCLUDE_AI));
+			const aiRegions = regionNames.filter((r) => r !== "HK");
+			groups.push({
 				name: GROUPS.AI,
 				type: "select",
-				proxies: [AUTO.AI],
-				"include-all": true,
-				"default-selected": AUTO.AI,
-				icon: icon("ChatGPT.png")
-			}, EXCLUDE_AI),
-			{
-				name: GROUPS.ADBLOCK,
-				type: "select",
 				proxies: [
-					"REJECT",
-					"DIRECT",
-					GROUPS.ALL
+					`${SMART_PREFIX}AI`,
+					...aiRegions,
+					GROUPS.MAIN,
+					...enableRegion ? [GROUPS.OTHER] : []
 				],
-				icon: icon("AdBlack.png")
-			}
-		];
+				"default-selected": `${SMART_PREFIX}AI`,
+				icon: icon("ChatGPT.png")
+			});
+		}
+		if (options.Google) groups.push({
+			name: GROUPS.GOOGLE,
+			type: "select",
+			proxies: serviceProxies,
+			icon: icon("Google_Search.png")
+		});
+		if (options.YouTube) {
+			const ytProxies = options.Google ? [GROUPS.GOOGLE, ...serviceProxies] : serviceProxies;
+			groups.push({
+				name: GROUPS.YOUTUBE,
+				type: "select",
+				proxies: ytProxies,
+				"default-selected": options.Google ? GROUPS.GOOGLE : GROUPS.MAIN,
+				icon: icon("YouTube.png")
+			});
+		}
+		if (options.Telegram) {
+			const hasSG = regionNames.includes("SG");
+			if (hasSG) groups.push({
+				name: "Telegram - Fallback",
+				type: "fallback",
+				proxies: ["SG", GROUPS.MAIN],
+				icon: icon("Telegram.png"),
+				...SETTINGS.MOBILE_URL_TEST_EXTRA
+			});
+			groups.push({
+				name: GROUPS.TELEGRAM,
+				type: "select",
+				proxies: [...hasSG ? ["Telegram - Fallback", "SG"] : [], ...serviceProxies],
+				"default-selected": hasSG ? "Telegram - Fallback" : GROUPS.MAIN,
+				icon: icon("Telegram.png")
+			});
+		}
+		if (options.Steam) groups.push({
+			name: GROUPS.STEAM,
+			type: "select",
+			proxies: serviceWithDirect,
+			icon: icon("Steam.png")
+		});
+		if (options.Apple) groups.push({
+			name: GROUPS.APPLE,
+			type: "select",
+			proxies: serviceWithDirect,
+			icon: icon("Apple.png")
+		});
+		if (options.Microsoft) groups.push({
+			name: GROUPS.MICROSOFT,
+			type: "select",
+			proxies: serviceWithDirect,
+			icon: icon("Microsoft.png")
+		});
+		if (options.Spotify) groups.push({
+			name: GROUPS.SPOTIFY,
+			type: "select",
+			proxies: serviceProxies,
+			icon: icon("Spotify.png")
+		});
+		if (options.广告拦截) groups.push({
+			name: GROUPS.ADBLOCK,
+			type: "select",
+			proxies: [
+				"REJECT",
+				"DIRECT",
+				GROUPS.MAIN
+			],
+			icon: icon("AdBlack.png")
+		});
+		groups.push({
+			name: GROUPS.GLOBAL,
+			type: "select",
+			proxies: [
+				GROUPS.MAIN,
+				GROUPS.ALL,
+				...options.AI ? [GROUPS.AI] : [],
+				...options.Google ? [GROUPS.GOOGLE] : [],
+				...options.YouTube ? [GROUPS.YOUTUBE] : [],
+				...options.Telegram ? [GROUPS.TELEGRAM] : [],
+				...options.Steam ? [GROUPS.STEAM] : [],
+				...options.Apple ? [GROUPS.APPLE] : [],
+				...options.Microsoft ? [GROUPS.MICROSOFT] : [],
+				...options.Spotify ? [GROUPS.SPOTIFY] : [],
+				...regionNames,
+				...enableRegion ? [GROUPS.OTHER] : [],
+				"DIRECT"
+			],
+			icon: icon("Global.png")
+		});
+		return groups;
 	};
 	function smartMain(config) {
 		config = config && typeof config === "object" ? config : {};
+		const options = getRuleOptions();
 		const originalProxies = Array.isArray(config.proxies) ? config.proxies : [];
 		const existingRules = Array.isArray(config.rules) ? config.rules : [];
 		delete config["geodata-mode"];
 		delete config["geo-auto-update"];
 		delete config["geo-update-interval"];
 		delete config["geox-url"];
+		const ruleTargets = buildRuleTargets(options);
 		config["rule-providers"] = {
 			...config["rule-providers"] || {},
 			...buildRuleProviders()
 		};
-		config.rules = mergeRules(STATIC_RULES, pickDirectRules(existingRules));
+		config.rules = mergeRules(buildStaticRules(ruleTargets), pickDirectRules(existingRules));
 		makeProxyNamesUnique(originalProxies);
 		if (originalProxies.length) config.proxies = originalProxies;
-		config["proxy-groups"] = buildSmartProxyGroups(hasProxySource(config), "");
+		config["proxy-groups"] = buildSmartProxyGroups(hasProxySource(config), options);
 		applyRuntime(config);
 		applySniffer(config);
 		applyTun(config);
