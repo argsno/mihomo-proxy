@@ -15,7 +15,7 @@ import { resolve } from "node:path";
  *
  * 五产物：默认 mode 构建完整版，`--mode simple` 极简版，
  * `--mode flclash` 手机极简版，`--mode bettbox` Bettbox 专属版，
- * `--mode smart` Bettbox 智能选路版。
+ * `--mode smart` Bettbox Smart 版。
  * （Vite 库模式的 IIFE 不支持多 entry，故用 mode 区分、分次构建。）
  */
 
@@ -168,7 +168,7 @@ const SMART = {
   fileName: "bettbox-smart.js",
   banner: `const Compatible_With_Bettbox = { ruleOptionsEnable: true };
 /**
- * bettbox-smart — Bettbox 智能选路版覆写脚本 v3.0
+ * bettbox-smart — Bettbox Smart 版覆写脚本 v3.0
  * ------------------------------------------------------------------
  * 与 bettbox-flclash 相同的完整分流布局（Google / YouTube / AI /
  * Telegram / Steam / Apple / Microsoft / Spotify + 地区分组
@@ -176,10 +176,10 @@ const SMART = {
  * 所有隐藏自动选路组由 url-test 换成 Bettbox 内核的 smart 类型，
  * 按真实连接质量打分选路：
  *
- *   All        —— 智能选路打头（全部节点），可手动切任意节点
- *   地区分组   —— 各地区智能选路打头，可手动切换
- *   Other      —— 未归类节点的智能选路
- *   AI         —— 排除香港的纯净节点池智能选路
+ *   All        —— 以 Smart 组打头（全部节点），可手动切任意节点
+ *   地区分组   —— 以各地区 Smart 组打头，可手动切换
+ *   Other      —— 未归类节点的 Smart 组
+ *   AI         —— 排除香港的纯净节点池 Smart 组
  *   main / GLOBAL —— 顶层入口与全局汇总
  *
  * smart 与 url-test 的区别：url-test 只看周期性测速延迟；smart 用真实

@@ -8,13 +8,13 @@ mihomo（Clash Meta）配置增强脚本 · Ultimate Stable Edition v3.0
 
 ## 五个版本，按需选择
 
-|                      | mihomo-proxy.js（完整版）                                    | simple-mihomo.js（极简版）         | flclash-mobile.js（FlClash 极简版） | bettbox-flclash.js（Bettbox 专属完整版） | bettbox-smart.js（Bettbox 智能选路版） |
+|                      | mihomo-proxy.js（完整版）                                    | simple-mihomo.js（极简版）         | flclash-mobile.js（FlClash 极简版） | bettbox-flclash.js（Bettbox 专属完整版） | bettbox-smart.js（Bettbox Smart 版） |
 | -------------------- | ------------------------------------------------------------ | ---------------------------------- | ----------------------------------- | ---------------------------------------- | -------------------------------------- |
 | 目标客户端           | Sparkle / Clash Verge Rev                                    | Sparkle / Clash Verge Rev          | **FlClash**（手机 / 极简用户）      | **Bettbox** / **FlClash**（全平台）      | **Bettbox**（`smart` 为内核专属类型）  |
 | 策略组数量           | 20+（地区组 + 服务组）                                       | 3 个                               | 3 个                                | 20+（完整服务组 + 地区组）               | 同 bettbox-flclash，自动选路组换 `smart` |
 | 地区分组             | HK / TW / JP / SG / KR / US / EU / AU / AS + Other           | 无                                 | 无                                  | HK / TW / JP / SG / KR / US / EU / AU / AS + Other（可开关） | 同 bettbox-flclash（可开关） |
 | 服务组               | Google / YouTube / AI / Telegram / Steam / Apple / Microsoft | 统一收敛到「全部」                 | 统一收敛到「全部」                  | Google / YouTube / AI / Telegram / Steam / Apple / Microsoft / Spotify（各可独立开关） | 同 bettbox-flclash（各可独立开关） |
-| 自动选路             | url-test 隐藏测速组（周期测速）                              | url-test 打头                      | url-test 打头                       | url-test 隐藏测速组（周期测速）          | **`smart` 智能选路**：真实连接质量打分 + 按站点记忆，固定 5 分钟重测 |
+| 自动选路             | url-test 隐藏测速组（周期测速）                              | url-test 打头                      | url-test 打头                       | url-test 隐藏测速组（周期测速）          | **Smart 组（内核 `smart` 类型）**：真实连接质量打分 + 按站点记忆，固定 5 分钟重测 |
 | 节点纳入方式         | 脚本枚举节点名（可排序）                                     | 脚本枚举节点名（可排序）           | 内核 `include-all` 运行时纳入       | 内核 `include-all` 运行时纳入            | 内核 `include-all` 运行时纳入          |
 | proxy-providers 订阅 | 不支持（只读 `proxies`）                                     | 不支持                             | ✅ 支持                             | ✅ 支持                                  | ✅ 支持                                |
 | 订阅增删节点         | 需重新应用脚本                                               | 需重新应用脚本                     | ✅ 自动跟随                         | ✅ 自动跟随                              | ✅ 自动跟随                            |
@@ -37,7 +37,7 @@ https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/flclash-m
 # Bettbox / FlClash 系列专属版（完整分流 + 地区分组 + 可视化开关）
 https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-flclash.js
 
-# Bettbox 智能选路版（完整分流 + smart 自动选路 + 可视化开关）
+# Bettbox Smart 版（完整分流 + smart 自动选路 + 可视化开关）
 https://raw.githubusercontent.com/wchiway/mihomo-proxy/refs/heads/main/bettbox-smart.js
 ```
 
@@ -228,18 +228,18 @@ mihomo-proxy.js    # 完整版（构建产物，请勿手改）
 simple-mihomo.js   # 极简版（构建产物，请勿手改）
 flclash-mobile.js  # 手机极简版 / FlClash（构建产物，请勿手改）
 bettbox-flclash.js # Bettbox / FlClash 专属版（构建产物，请勿手改）
-bettbox-smart.js   # Bettbox 智能选路版（构建产物，请勿手改）
+bettbox-smart.js   # Bettbox Smart 版（构建产物，请勿手改）
 src/               # 五版共享的 TypeScript 源码
 ├── index.ts       #   完整版打包入口
 ├── simple.ts      #   极简版打包入口
 ├── flclash.ts     #   手机极简版打包入口
 ├── bettbox.ts     #   Bettbox 专属版打包入口
-├── smart.ts       #   Bettbox 智能选路版打包入口
+├── smart.ts       #   Bettbox Smart 版打包入口
 ├── main.ts        #   完整版主流程（服务级独立策略组）
 ├── simple-main.ts #   极简版主流程（全部 / AI / 广告拦截 三组）
 ├── flclash-main.ts#   手机极简版主流程（同三组，节点走内核 include-all）
 ├── bettbox-main.ts#   Bettbox 专属版主流程（全量服务组 + 地区组 + 可视化开关适配）
-├── smart-main.ts  #   Bettbox 智能选路版主流程（同 bettbox 布局，自动组换 smart）
+├── smart-main.ts  #   Bettbox Smart 版主流程（同 bettbox 布局，自动组换 smart）
 ├── user-config.ts #   用户自定义区（五版共享）
 ├── settings.ts    #   常量配置（SETTINGS / DNS_SERVERS / Fake-IP）
 ├── utils.ts       #   工具函数（倍率/线路解析缓存等）
@@ -297,7 +297,7 @@ pnpm verify:runtime # 启动内核查 API，验 include-all / exclude-filter 实
 
 ### v3.2（2026-10）
 
-- **新增 Bettbox 智能选路版 `bettbox-smart.js`**：
+- **新增 Bettbox Smart 版 `bettbox-smart.js`**：
   - 与 `bettbox-flclash.js` 相同的完整分流布局与 Bettbox 可视化开关（`Compatible_With_Bettbox`，`ruleOptionsEnable` 开关与图标面板同款）
   - 所有隐藏自动选路组由 `url-test` 换为 Bettbox 内核专属的 `smart` 类型：首响应延迟 EWMA + 重传惩罚 + 失败降权 + 按站点记忆，失败时自动回退，固定 5 分钟重测一轮
   - 支持 `POLICY_PRIORITY` 节点级优先级（`src/user-config.ts`，正则:系数）

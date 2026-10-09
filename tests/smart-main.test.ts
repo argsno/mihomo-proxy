@@ -12,30 +12,30 @@ const toJsRegex = (src: string) => {
 };
 
 const SMART_GROUP_NAMES = [
-  "智能选路 - All",
+  "Smart - All",
   "All",
-  "智能选路 - HK",
+  "Smart - HK",
   "HK",
-  "智能选路 - TW",
+  "Smart - TW",
   "TW",
-  "智能选路 - JP",
+  "Smart - JP",
   "JP",
-  "智能选路 - SG",
+  "Smart - SG",
   "SG",
-  "智能选路 - KR",
+  "Smart - KR",
   "KR",
-  "智能选路 - US",
+  "Smart - US",
   "US",
-  "智能选路 - EU",
+  "Smart - EU",
   "EU",
-  "智能选路 - AU",
+  "Smart - AU",
   "AU",
-  "智能选路 - AS",
+  "Smart - AS",
   "AS",
-  "智能选路 - Other",
+  "Smart - Other",
   "Other",
   "main",
-  "智能选路 - AI",
+  "Smart - AI",
   "AI",
   "Google",
   "YouTube",
@@ -64,20 +64,20 @@ describe("buildSmartProxyGroups", () => {
 
   it("所有隐藏自动组均为 smart 类型且不写 interval/tolerance", () => {
     const groups = buildSmartProxyGroups(true);
-    const autos = groups.filter((g) => g.name.startsWith("智能选路 - "));
+    const autos = groups.filter((g) => g.name.startsWith("Smart - "));
     expect(autos.map((g) => g.name)).toEqual([
-      "智能选路 - All",
-      "智能选路 - HK",
-      "智能选路 - TW",
-      "智能选路 - JP",
-      "智能选路 - SG",
-      "智能选路 - KR",
-      "智能选路 - US",
-      "智能选路 - EU",
-      "智能选路 - AU",
-      "智能选路 - AS",
-      "智能选路 - Other",
-      "智能选路 - AI",
+      "Smart - All",
+      "Smart - HK",
+      "Smart - TW",
+      "Smart - JP",
+      "Smart - SG",
+      "Smart - KR",
+      "Smart - US",
+      "Smart - EU",
+      "Smart - AU",
+      "Smart - AS",
+      "Smart - Other",
+      "Smart - AI",
     ]);
     for (const g of autos) {
       expect(g.type).toBe("smart");
@@ -96,7 +96,7 @@ describe("buildSmartProxyGroups", () => {
     expect(groups.filter((g) => g.type === "smart")).toHaveLength(12);
   });
 
-  it("select 组以对应智能选路组打头并默认选中", () => {
+  it("select 组以对应 Smart 组打头并默认选中", () => {
     const groups = buildSmartProxyGroups(true);
     const byName = new Map(groups.map((g) => [g.name, g]));
     for (const name of [
@@ -113,14 +113,14 @@ describe("buildSmartProxyGroups", () => {
       "Other",
     ]) {
       const g = byName.get(name);
-      expect(g?.proxies).toEqual([`智能选路 - ${name}`]);
-      expect(g?.["default-selected"]).toBe(`智能选路 - ${name}`);
+      expect(g?.proxies).toEqual([`Smart - ${name}`]);
+      expect(g?.["default-selected"]).toBe(`Smart - ${name}`);
     }
-    // AI 服务组：智能选路打头，其后是可手选的纯净地区与 main
+    // AI 服务组：Smart 组打头，其后是可手选的纯净地区与 main
     const ai = byName.get("AI");
-    expect(ai?.proxies[0]).toBe("智能选路 - AI");
+    expect(ai?.proxies[0]).toBe("Smart - AI");
     expect(ai?.proxies).not.toContain("HK");
-    expect(ai?.["default-selected"]).toBe("智能选路 - AI");
+    expect(ai?.["default-selected"]).toBe("Smart - AI");
     expect(byName.get("main")?.["default-selected"]).toBe("All");
     expect(byName.get("YouTube")?.["default-selected"]).toBe("Google");
     expect(byName.get("Telegram")?.["default-selected"]).toBe(
@@ -146,17 +146,13 @@ describe("buildSmartProxyGroups", () => {
   it("exclude-filter 排除信息节点与香港，且不误伤自身组名", () => {
     const groups = buildSmartProxyGroups(true);
     const byName = new Map(groups.map((g) => [g.name, g]));
-    const allExclude = toJsRegex(
-      byName.get("智能选路 - All")?.["exclude-filter"],
-    );
-    const aiExclude = toJsRegex(
-      byName.get("智能选路 - AI")?.["exclude-filter"],
-    );
+    const allExclude = toJsRegex(byName.get("Smart - All")?.["exclude-filter"]);
+    const aiExclude = toJsRegex(byName.get("Smart - AI")?.["exclude-filter"]);
     expect(allExclude.test("剩余流量：100GB")).toBe(true);
     expect(allExclude.test("🇯🇵 日本 02 0.5x")).toBe(false);
     expect(allExclude.test("")).toBe(false);
-    expect(allExclude.test("智能选路 - All")).toBe(false);
-    expect(aiExclude.test("智能选路 - AI")).toBe(false);
+    expect(allExclude.test("Smart - All")).toBe(false);
+    expect(aiExclude.test("Smart - AI")).toBe(false);
     expect(allExclude.test("🇭🇰 香港 IEPL 01")).toBe(false);
     expect(aiExclude.test("🇭🇰 香港 IEPL 01")).toBe(true);
     expect(aiExclude.test("🇸🇬 新加坡 BGP")).toBe(false);
@@ -171,8 +167,8 @@ describe("buildSmartProxyGroups", () => {
     expect(otherExclude.test("剩余流量：100GB")).toBe(true);
     expect(otherExclude.test("Fallback 备用节点")).toBe(false);
     // 关键回归：组名里的 "th"（Other）不能被当成泰国短码 TH 过滤掉，
-    // 否则 Other 组连自己的智能选路组都不剩，整组退化成空成员兜底
-    expect(otherExclude.test("智能选路 - Other")).toBe(false);
+    // 否则 Other 组连自己的 Smart 组都不剩，整组退化成空成员兜底
+    expect(otherExclude.test("Smart - Other")).toBe(false);
     expect(otherExclude.test("URL Test - Other")).toBe(false);
   });
 
@@ -190,7 +186,7 @@ describe("buildSmartProxyGroups", () => {
     expect(euRe.test("IT-01")).toBe(true);
     // 词内子串不再误伤：Plus(us) / Other(th) / Digital(it) / Singapore(in)
     expect(usRe.test("Plus 中转")).toBe(false);
-    expect(asRe.test("智能选路 - Other")).toBe(false);
+    expect(asRe.test("Smart - Other")).toBe(false);
     expect(euRe.test("Digital")).toBe(false);
     expect(asRe.test("Singapore 01")).toBe(false);
     expect(filterOf("SG").test("Singapore 01")).toBe(true);
@@ -213,15 +209,13 @@ describe("buildSmartProxyGroups", () => {
     expect(bad).toEqual([]);
   });
 
-  it("policy-priority 非空时写入全部智能选路组，为空时不下发", () => {
+  it("policy-priority 非空时写入全部 Smart 组，为空时不下发", () => {
     const withPriority = buildSmartProxyGroups(
       true,
       DEFAULT_RULE_OPTIONS,
       "Premium:0.9;备用:1.3",
     );
-    for (const g of withPriority.filter((x) =>
-      x.name.startsWith("智能选路 - "),
-    )) {
+    for (const g of withPriority.filter((x) => x.name.startsWith("Smart - "))) {
       expect(g["policy-priority"]).toBe("Premium:0.9;备用:1.3");
     }
     // 非 smart 组不下发该字段
@@ -229,7 +223,7 @@ describe("buildSmartProxyGroups", () => {
       withPriority.find((x) => x.name === "All")?.["policy-priority"],
     ).toBeUndefined();
     const blank = buildSmartProxyGroups(true, DEFAULT_RULE_OPTIONS, "   ");
-    for (const g of blank.filter((x) => x.name.startsWith("智能选路 - "))) {
+    for (const g of blank.filter((x) => x.name.startsWith("Smart - "))) {
       expect(g["policy-priority"]).toBeUndefined();
     }
   });
@@ -244,8 +238,8 @@ describe("buildSmartProxyGroups", () => {
     expect(names).not.toContain("YouTube");
     expect(names).not.toContain("HK");
     expect(names).not.toContain("Other");
-    expect(names).toContain("智能选路 - All");
-    expect(names).not.toContain("智能选路 - HK");
+    expect(names).toContain("Smart - All");
+    expect(names).not.toContain("Smart - HK");
     // main / GLOBAL 中的地区与非地区项同步移除
     expect(custom.find((g) => g.name === "main")?.proxies).toEqual(["All"]);
     expect(custom.find((g) => g.name === "GLOBAL")?.proxies).not.toContain(

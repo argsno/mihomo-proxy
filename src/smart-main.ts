@@ -13,7 +13,7 @@ import { makeProxyNamesUnique } from "./proxies";
 import type { ClashConfig, Proxy, ProxyGroup } from "./types";
 
 /**
- * Bettbox 智能选路版覆写脚本（bettbox-smart）
+ * Bettbox Smart 版覆写脚本（bettbox-smart）
  * ------------------------------------------------------------------
  * 与 bettbox-flclash 相同的完整分流布局（main / All / GLOBAL / 地区分组 /
  * 服务分流组 + Bettbox 可视化开关），唯一区别：所有自动选路组由
@@ -24,7 +24,7 @@ import type { ClashConfig, Proxy, ProxyGroup } from "./types";
  *   失败节点的顺序自动回退；内核固定每 5 分钟重测一轮。
  *   url-test 只看周期性测速延迟，感知不到真实连接质量，这是二者的核心差异。
  *
- *   「智能选路 - X」均为隐藏自动组，供对应 select 组打头：
+ *   「Smart - X」均为隐藏自动组，供对应 select 组打头：
  *     All / 各地区 / Other / AI（AI 组排除香港出口）
  *   其余分流与 Bettbox 完整版一致：Google / YouTube / Telegram / Steam /
  *   Apple / Microsoft / Spotify / 广告拦截，地区分组可在 Bettbox UI 中开关。
@@ -116,8 +116,8 @@ const GROUPS = {
   OTHER: "Other",
 };
 
-/** 隐藏智能选路组名前缀（对应 bettbox-flclash 的 "URL Test - "） */
-const SMART_PREFIX = "智能选路 - ";
+/** 隐藏 Smart 组名前缀（对应 bettbox-flclash 的 "URL Test - "） */
+const SMART_PREFIX = "Smart - ";
 
 // --- 地区正则过滤规则定义 ---
 
@@ -339,7 +339,7 @@ export const buildSmartProxyGroups = (
   const enableRegion = options.地区分组;
 
   /**
-   * 隐藏智能选路组通用构造：smart 类型 + 内核固定 5 分钟重测
+   * 隐藏 Smart 组通用构造：smart 类型 + 内核固定 5 分钟重测
    * （不写 interval/tolerance）+ 空成员兜底 + 用户级节点优先级。
    */
   const smartAuto = (name: string, iconFile: string): ProxyGroup =>
@@ -448,7 +448,7 @@ export const buildSmartProxyGroups = (
   // ─── 有节点来源：完整策略组体系 ───
   const groups: ProxyGroup[] = [];
 
-  // 1. All：全局智能选路 + 手动选择
+  // 1. All：全局 Smart + 手动选择
   groups.push(
     withExclude(smartAuto(`${SMART_PREFIX}All`, "Auto.png"), EXCLUDE_COMMON),
   );
@@ -473,7 +473,7 @@ export const buildSmartProxyGroups = (
       const def = REGION_DEFS.find((r) => r.name === rName);
       if (!def) continue;
 
-      // 地区隐藏智能选路组
+      // 地区隐藏 Smart 组
       groups.push(
         withFilters(
           smartAuto(`${SMART_PREFIX}${def.name}`, def.icon),

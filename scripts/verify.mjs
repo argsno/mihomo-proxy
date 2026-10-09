@@ -855,7 +855,7 @@ assertExplicitMembersSurvive("bettbox", bettbox);
   assertRuleTargets("bettbox-custom", customResult);
 }
 
-// ============ Bettbox 智能选路版（bettbox-smart） ============
+// ============ Bettbox Smart 版（bettbox-smart） ============
 // 与 bettbox-flclash 相同的完整分流布局与可视化开关，唯一区别：
 // 所有隐藏自动选路组由 url-test 改为 smart（Bettbox 内核专属类型）。
 const smart = runScript("bettbox-smart.js", flclashConfig(), 1);
@@ -866,15 +866,15 @@ assertExplicitMembersSurvive("smart", smart);
   const names = groups.map((g) => g.name);
   const byName = new Map(groups.map((g) => [g.name, g]));
 
-  // 完整布局：组名与 bettbox-flclash 一一对应（隐藏自动组前缀改为智能选路）
+  // 完整布局：组名与 bettbox-flclash 一一对应（隐藏自动组前缀改为 Smart）
   assert(
     JSON.stringify(names) ===
       JSON.stringify(
         (bettbox["proxy-groups"] ?? []).map((g) =>
-          g.name.replace(/^URL Test - /, "智能选路 - "),
+          g.name.replace(/^URL Test - /, "Smart - "),
         ),
       ),
-    `[smart] 策略组与 bettbox-flclash 同布局同顺序（隐藏自动组改智能选路）：${names.join(" / ")}`,
+    `[smart] 策略组与 bettbox-flclash 同布局同顺序（隐藏自动组改 Smart）：${names.join(" / ")}`,
   );
   // 默认开关下出口目标与 bettbox-flclash 一致 → 分流行为可直接互换验证
   assert(
@@ -882,10 +882,10 @@ assertExplicitMembersSurvive("smart", smart);
     "[smart] 分流规则与 bettbox-flclash 逐条相同（含出口策略组名）",
   );
 
-  const autoNames = names.filter((n) => n.startsWith("智能选路 - "));
+  const autoNames = names.filter((n) => n.startsWith("Smart - "));
   assert(
     autoNames.length === 12,
-    `[smart] 隐藏智能选路组共 12 个（All/9 地区/Other/AI）：${autoNames.join(" / ")}`,
+    `[smart] 隐藏 Smart 组共 12 个（All/9 地区/Other/AI）：${autoNames.join(" / ")}`,
   );
   assert(
     groups.every((g) => g.type !== "url-test"),
@@ -931,7 +931,7 @@ assertExplicitMembersSurvive("smart", smart);
     `[smart] empty-fallback 未填策略组（异常：${badEmptyFallback.join(",") || "无"}）`,
   );
 
-  // select 组默认选中对应的智能选路组
+  // select 组默认选中对应的 Smart 组
   for (const n of [
     "All",
     "HK",
@@ -947,16 +947,16 @@ assertExplicitMembersSurvive("smart", smart);
   ]) {
     assert(
       JSON.stringify(byName.get(n)?.proxies) ===
-        JSON.stringify([`智能选路 - ${n}`]) &&
-        byName.get(n)?.["default-selected"] === `智能选路 - ${n}`,
-      `[smart]「${n}」组以智能选路打头并默认选中`,
+        JSON.stringify([`Smart - ${n}`]) &&
+        byName.get(n)?.["default-selected"] === `Smart - ${n}`,
+      `[smart]「${n}」组以 Smart 打头并默认选中`,
     );
   }
   assert(
-    byName.get("AI")?.proxies?.[0] === "智能选路 - AI" &&
-      byName.get("AI")?.["default-selected"] === "智能选路 - AI" &&
+    byName.get("AI")?.proxies?.[0] === "Smart - AI" &&
+      byName.get("AI")?.["default-selected"] === "Smart - AI" &&
       !byName.get("AI")?.proxies?.includes("HK"),
-    "[smart]「AI」组以智能选路打头、默认选中且不含香港地区组",
+    "[smart]「AI」组以 Smart 打头、默认选中且不含香港地区组",
   );
   assert(
     byName.get("main")?.["default-selected"] === "All" &&
@@ -970,8 +970,8 @@ assertExplicitMembersSurvive("smart", smart);
   );
 
   // exclude-filter 行为与 bettbox-flclash 同款语义
-  const allExclude = byName.get("智能选路 - All")?.["exclude-filter"];
-  const aiExclude = byName.get("智能选路 - AI")?.["exclude-filter"];
+  const allExclude = byName.get("Smart - All")?.["exclude-filter"];
+  const aiExclude = byName.get("Smart - AI")?.["exclude-filter"];
   assert(
     typeof allExclude === "string" && allExclude.startsWith("(?i)(?:"),
     `[smart] exclude-filter 为大小写不敏感的非捕获组：${allExclude}`,
@@ -984,13 +984,13 @@ assertExplicitMembersSurvive("smart", smart);
   );
   assert(
     !allRe.test("") &&
-      !allRe.test("智能选路 - All") &&
-      !aiRe.test("智能选路 - AI"),
+      !allRe.test("Smart - All") &&
+      !aiRe.test("Smart - AI"),
     "[smart] exclude-filter 不匹配空串、不误伤自身组名",
   );
   assert(
     !allRe.test("🇭🇰 香港 IEPL 01"),
-    "[smart]「智能选路 - All」保留香港节点",
+    "[smart]「Smart - All」保留香港节点",
   );
   assert(aiRe.test("🇭🇰 香港 IEPL 01"), "[smart] AI 组排除香港节点");
   const hkFilter = toJsRegex(byName.get("HK")?.["filter"]);
@@ -1087,7 +1087,7 @@ assertExplicitMembersSurvive("smart", smart);
   assert(
     !smartCustomNames.includes("HK") &&
       !smartCustomNames.includes("Other") &&
-      !smartCustomNames.some((n) => n.startsWith("智能选路 - HK")),
+      !smartCustomNames.some((n) => n.startsWith("Smart - HK")),
     "[smart-自定义] 关闭地区分组后不生成地区组与 Other 组",
   );
   assert(
@@ -1118,7 +1118,7 @@ assertExplicitMembersSurvive("smart", smart);
     1,
   );
   const providerAuto = (providerOnly["proxy-groups"] ?? []).find(
-    (g) => g.name === "智能选路 - All",
+    (g) => g.name === "Smart - All",
   );
   assert(
     providerAuto?.type === "smart" && providerAuto?.["include-all"] === true,

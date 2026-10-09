@@ -24,7 +24,7 @@ pnpm verify:kernel            # 真实 mihomo 内核 -t 校验（需 MIHOMO_BIN 
 pnpm verify:runtime           # 启动内核查 /proxies API，验 include-all/exclude-filter 实际生效
 ```
 
-`pnpm build` 完整流程：`vite build`（默认完整版）→ `vite build --mode simple`（极简版）→ `vite build --mode flclash`（手机极简版）→ `vite build --mode bettbox`（Bettbox 专属版）→ `vite build --mode smart`（Bettbox 智能选路版）→ `node scripts/verify.mjs`（vm 断言 + 产物同步）。
+`pnpm build` 完整流程：`vite build`（默认完整版）→ `vite build --mode simple`（极简版）→ `vite build --mode flclash`（手机极简版）→ `vite build --mode bettbox`（Bettbox 专属版）→ `vite build --mode smart`（Bettbox Smart 版）→ `node scripts/verify.mjs`（vm 断言 + 产物同步）。
 
 **产物提交由 CI 自动完成**：`pnpm build` 会在本地生成/更新 `mihomo-proxy.js`、`simple-mihomo.js`、`flclash-mobile.js`、`bettbox-flclash.js`、`bettbox-smart.js` 五个产物文件，但这些不需要手动 `git add` / `git push`。GitHub Actions 在 main 分支 push 时，三级校验全部通过后会自动执行 `git commit -m "chore: 同步构建产物 [skip ci]"` 并 push。本地 build 后的产物改动可以直接 discard。
 
@@ -38,7 +38,7 @@ pnpm verify:runtime           # 启动内核查 /proxies API，验 include-all/e
 | `src/simple.ts` | `simple-mihomo.js` | 同上 | 3 组（全部/AI/广告拦截） |
 | `src/flclash.ts` | `flclash-mobile.js` | FlClash (flutter_js → QuickJS) | 同 3 组，节点走 `include-all` + `exclude-filter` |
 | `src/bettbox.ts` | `bettbox-flclash.js` | Bettbox / FlClash (QuickJS) | 完整策略组 + 地区分组 + `include-all` + `Compatible_With_Bettbox` 可视化开关 |
-| `src/smart.ts` | `bettbox-smart.js` | Bettbox (QuickJS) | 同 bettbox-flclash 完整布局与可视化开关，隐藏自动组全部换 `smart` 智能选路类型 |
+| `src/smart.ts` | `bettbox-smart.js` | Bettbox (QuickJS) | 同 bettbox-flclash 完整布局与可视化开关，隐藏自动组全部换内核 `smart` 类型（组名前缀 `Smart - `） |
 
 **共享模块**（五版完全相同）：`settings.ts`、`utils.ts`、`rule-providers.ts`、`rules.ts`、`dns.ts`、`runtime.ts`、`user-config.ts`。差异仅在各版自己的 `*-main.ts` 中注入不同的 `RuleTargets` 出口目标名和策略组生成逻辑。构建期即保证分流规则骨架、DNS、TUN 五版一致。
 
