@@ -93,7 +93,7 @@ var __mihomoSimple = (function(exports) {
 			"expected-status": EXPECTED_STATUS
 		},
 		/**
-		* smart 智能选路组参数（Bettbox 内核专属，bettbox-smart 变体）。
+		* smart 组参数（Bettbox 内核专属，bettbox-smart 变体；组名前缀 Smart - ）。
 		* smart 组按真实连接质量打分选路（首响应延迟 + 重传惩罚 + 按站点记忆），
 		* 内核固定每 5 分钟重测一轮：interval 参数无效（不写入，避免误解），
 		* 择优范围由内核的优选集合自动决定，也没有 url-test 的 tolerance 语义。
