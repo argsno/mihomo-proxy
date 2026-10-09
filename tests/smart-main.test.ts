@@ -170,6 +170,47 @@ describe("buildSmartProxyGroups", () => {
     expect(otherExclude.test("🇭🇰 香港 IEPL 01")).toBe(true);
     expect(otherExclude.test("剩余流量：100GB")).toBe(true);
     expect(otherExclude.test("Fallback 备用节点")).toBe(false);
+    // 关键回归：组名里的 "th"（Other）不能被当成泰国短码 TH 过滤掉，
+    // 否则 Other 组连自己的智能选路组都不剩，整组退化成空成员兜底
+    expect(otherExclude.test("智能选路 - Other")).toBe(false);
+    expect(otherExclude.test("URL Test - Other")).toBe(false);
+  });
+
+  it("地区短码只匹配独立出现的代码，不命中词内子串", () => {
+    const groups = buildSmartProxyGroups(true);
+    const byName = new Map(groups.map((g) => [g.name, g]));
+    const filterOf = (name: string) => toJsRegex(byName.get(name)?.filter);
+    const usRe = filterOf("US");
+    const asRe = filterOf("AS");
+    const euRe = filterOf("EU");
+    // 独立出现的代码照常命中（数字/分隔符/non-ASCII 相邻都算边界）
+    expect(usRe.test("US-01")).toBe(true);
+    expect(usRe.test("01 US")).toBe(true);
+    expect(asRe.test("TH-01")).toBe(true);
+    expect(euRe.test("IT-01")).toBe(true);
+    // 词内子串不再误伤：Plus(us) / Other(th) / Digital(it) / Singapore(in)
+    expect(usRe.test("Plus 中转")).toBe(false);
+    expect(asRe.test("智能选路 - Other")).toBe(false);
+    expect(euRe.test("Digital")).toBe(false);
+    expect(asRe.test("Singapore 01")).toBe(false);
+    expect(filterOf("SG").test("Singapore 01")).toBe(true);
+  });
+
+  it("显式列出的策略组员不会被父组的 exclude-filter 误伤", () => {
+    const groups = buildSmartProxyGroups(true);
+    const groupNames = new Set(groups.map((g) => g.name));
+    const bad: string[] = [];
+    for (const g of groups) {
+      const exclude = g["exclude-filter"];
+      if (typeof exclude !== "string" || !exclude) continue;
+      const re = toJsRegex(exclude);
+      for (const member of g.proxies ?? []) {
+        if (groupNames.has(member) && re.test(member)) {
+          bad.push(`${g.name}→${member}`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
   });
 
   it("policy-priority 非空时写入全部智能选路组，为空时不下发", () => {

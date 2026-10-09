@@ -129,57 +129,84 @@ interface RegionDef {
 }
 
 /**
+ * ASCII 地区短码统一包裹字母边界。
+ * 内核把 filter / exclude-filter 作用在「成员名」上（含显式列出的策略组名），
+ * 而 2 字母代码（TH/US/IN…）会命中普通英文单词内部——最典型的是 "Other"
+ * 里含 "th"，会把 Other 组自己的自动组过滤掉，整组空成员退化成兜底出口；
+ * "Plus"（us）、"Singapore"（in → 误进 AS 组）同理。加边界后只匹配独立
+ * 出现的代码（"TH-01"、"01 TH"、"🇹🇭" 仍可命中），完整单词不受影响。
+ */
+const code = (t: string) => `(?<![A-Za-z])${t}(?![A-Za-z])`;
+
+/**
  * 地区定义与 filter 正则
  * 使用 (?i)(?:pattern1|pattern2) 语法统一包裹。
  */
 const REGION_DEFS: RegionDef[] = [
   {
     name: "HK",
-    filter: "(?i)(?:香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰)",
+    filter: `(?i)(?:香港|${code("HK")}|${code("HKG")}|HONGKONG|HONG KONG|🇭🇰)`,
     icon: "Hong_Kong.png",
   },
   {
     name: "TW",
-    filter: "(?i)(?:台湾|台北|新北|TW|TWN|TAIWAN|TAIPEI|🇹🇼)",
+    filter: `(?i)(?:台湾|台北|新北|${code("TW")}|${code("TWN")}|TAIWAN|TAIPEI|🇹🇼)`,
     icon: "Taiwan.png",
   },
   {
     name: "JP",
-    filter: "(?i)(?:日本|东京|大阪|JP|JPN|JAPAN|TOKYO|OSAKA|🇯🇵)",
+    filter: `(?i)(?:日本|东京|大阪|${code("JP")}|${code("JPN")}|JAPAN|TOKYO|OSAKA|🇯🇵)`,
     icon: "Japan.png",
   },
   {
     name: "SG",
-    filter: "(?i)(?:新加坡|狮城|SG|SGP|SINGAPORE|🇸🇬)",
+    filter: `(?i)(?:新加坡|狮城|${code("SG")}|${code("SGP")}|SINGAPORE|🇸🇬)`,
     icon: "Singapore.png",
   },
   {
     name: "KR",
-    filter: "(?i)(?:韩国|首尔|KR|KOR|KOREA|SEOUL|🇰🇷)",
+    filter: `(?i)(?:韩国|首尔|${code("KR")}|${code("KOR")}|KOREA|SEOUL|🇰🇷)`,
     icon: "Korea.png",
   },
   {
     name: "US",
-    filter:
-      "(?i)(?:美国|纽约|旧金山|洛杉矶|西雅图|芝加哥|US|USA|NEW YORK|SAN FRANCISCO|LOS ANGELES|SEATTLE|CHICAGO|🇺🇸)",
+    filter: `(?i)(?:美国|纽约|旧金山|洛杉矶|西雅图|芝加哥|${code("US")}|${code("USA")}|NEW YORK|SAN FRANCISCO|LOS ANGELES|SEATTLE|CHICAGO|🇺🇸)`,
     icon: "United_States.png",
   },
   {
     name: "EU",
-    filter:
-      "(?i)(?:欧洲|德国|法国|英国|荷兰|俄罗斯|意大利|西班牙|瑞典|瑞士|波兰|芬兰|土耳其|爱尔兰|奥地利|法兰克福|伦敦|EU|DE|FR|UK|GB|NL|RU|IT|ES|SE|CH|PL|FI|TR|IE|AT|GERMANY|FRANCE|LONDON|FRANKFURT|🇪🇺|🇩🇪|🇫🇷|🇬🇧|🇳🇱|🇷🇺|🇮🇹|🇪🇸|🇸🇪|🇨🇭|🇵🇱|🇫🇮|🇹🇷|🇮🇪|🇦🇹|🇧🇪)",
+    filter: `(?i)(?:欧洲|德国|法国|英国|荷兰|俄罗斯|意大利|西班牙|瑞典|瑞士|波兰|芬兰|土耳其|爱尔兰|奥地利|法兰克福|伦敦|${[
+      "EU",
+      "DE",
+      "FR",
+      "UK",
+      "GB",
+      "NL",
+      "RU",
+      "IT",
+      "ES",
+      "SE",
+      "CH",
+      "PL",
+      "FI",
+      "TR",
+      "IE",
+      "AT",
+    ]
+      .map(code)
+      .join(
+        "|",
+      )}|GERMANY|FRANCE|LONDON|FRANKFURT|🇪🇺|🇩🇪|🇫🇷|🇬🇧|🇳🇱|🇷🇺|🇮🇹|🇪🇸|🇸🇪|🇨🇭|🇵🇱|🇫🇮|🇹🇷|🇮🇪|🇦🇹|🇧🇪)`,
     icon: "European_Union.png",
   },
   {
     name: "AU",
-    filter:
-      "(?i)(?:澳大利亚|澳洲|悉尼|墨尔本|AU|AUS|AUSTRALIA|SYDNEY|MELBOURNE|🇦🇺)",
+    filter: `(?i)(?:澳大利亚|澳洲|悉尼|墨尔本|${code("AU")}|${code("AUS")}|AUSTRALIA|SYDNEY|MELBOURNE|🇦🇺)`,
     icon: "Australia.png",
   },
   {
     name: "AS",
-    filter:
-      "(?i)(?:越南|泰国|马来西亚|印尼|菲律宾|印度|VN|TH|MY|ID|PH|IN|VIETNAM|THAILAND|MALAYSIA|INDONESIA|PHILIPPINES|MANILA|🇻🇳|🇹🇭|🇲🇾|🇮🇩|🇵🇭|🇮🇳)",
+    filter: `(?i)(?:越南|泰国|马来西亚|印尼|菲律宾|印度|${code("VN")}|${code("TH")}|${code("MY")}|${code("ID")}|${code("PH")}|${code("IN")}|VIETNAM|THAILAND|MALAYSIA|INDONESIA|PHILIPPINES|MANILA|🇻🇳|🇹🇭|🇲🇾|🇮🇩|🇵🇭|🇮🇳)`,
     icon: "Asia_Map.png",
   },
 ];
@@ -189,8 +216,11 @@ const REGION_ORDER = ["HK", "TW", "JP", "SG", "KR", "US", "EU", "AU", "AS"];
 
 // --- 节点过滤器（RegExp → dlclark/regexp2 正则转换） ---
 
-/** 香港节点识别（AI 组需剔除香港出口） */
-const HK_FILTER = /香港|HK|HKG|HONGKONG|HONG KONG|🇭🇰/i;
+/** 香港节点识别（AI 组需剔除香港出口），短码同样加字母边界 */
+const HK_FILTER = new RegExp(
+  `香港|${code("HK")}|${code("HKG")}|HONGKONG|HONG KONG|🇭🇰`,
+  "i",
+);
 
 /**
  * 取正则源码，空正则返回 ""。

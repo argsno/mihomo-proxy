@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pnpm install                  # Node 20+ / pnpm 11+
 pnpm typecheck                # tsc 类型检查
-pnpm test                     # vitest 单元测试（45 项）
+pnpm test                     # vitest 单元测试（47 项）
 pnpm test -- -t "关键词"       # 运行匹配的单测
 pnpm build                    # 五产物构建 → node:vm 冒烟断言 → 同步到仓库根目录
 pnpm verify:kernel            # 真实 mihomo 内核 -t 校验（需 MIHOMO_BIN 或本地内核）

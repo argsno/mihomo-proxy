@@ -107,6 +107,32 @@ const assertRuleTargets = (tag, result) => {
   );
 };
 
+/**
+ * 静态断言：显式列出的成员（多为本变体的隐藏自动组）不能被父组的
+ * exclude-filter 误伤 —— 内核把 exclude-filter 作用在所有成员名上
+ * （adapter/outboundgroup/groupbase.go 的 GetProxies，含显式列出的组名），
+ * 组名一旦命中地区短码（如 "Other" 里含 th）就会整组空成员退化成兜底出口。
+ */
+const assertExplicitMembersSurvive = (tag, result) => {
+  const groups = result["proxy-groups"] ?? [];
+  const groupNames = new Set(groups.map((g) => g.name));
+  const bad = [];
+  for (const g of groups) {
+    const exclude = g["exclude-filter"];
+    if (typeof exclude !== "string" || !exclude) continue;
+    const re = toJsRegex(exclude);
+    for (const member of g.proxies ?? []) {
+      if (groupNames.has(member) && re.test(member)) {
+        bad.push(`${g.name}→${member}`);
+      }
+    }
+  }
+  assert(
+    bad.length === 0,
+    `[${tag}] 显式策略组员未被父组 exclude-filter 误伤（异常：${bad.join(",") || "无"}）`,
+  );
+};
+
 /** 两个版本共同的断言（DNS 防泄露铁律 / 规则一致性 / 节点处理） */
 const assertCommon = (tag, result) => {
   assert(typeof result === "object" && !!result, `[${tag}] main 返回对象`);
@@ -383,6 +409,7 @@ assertCommon("simple", simple);
 // proxy-providers（App 在调用前补成 {}）。
 const flclash = runScript("flclash-mobile.js", flclashConfig(), 1);
 assertCommon("flclash", flclash);
+assertExplicitMembersSurvive("flclash", flclash);
 {
   const groups = flclash["proxy-groups"] ?? [];
   const names = groups.map((g) => g.name);
@@ -533,6 +560,7 @@ assertCommon("flclash", flclash);
 // proxy-providers（App 在调用前补成 {}）。
 const bettbox = runScript("bettbox-flclash.js", flclashConfig(), 1);
 assertCommon("bettbox", bettbox);
+assertExplicitMembersSurvive("bettbox", bettbox);
 {
   const groups = bettbox["proxy-groups"] ?? [];
   const names = groups.map((g) => g.name);
@@ -832,6 +860,7 @@ assertCommon("bettbox", bettbox);
 // 所有隐藏自动选路组由 url-test 改为 smart（Bettbox 内核专属类型）。
 const smart = runScript("bettbox-smart.js", flclashConfig(), 1);
 assertCommon("smart", smart);
+assertExplicitMembersSurvive("smart", smart);
 {
   const groups = smart["proxy-groups"] ?? [];
   const names = groups.map((g) => g.name);
