@@ -147,7 +147,7 @@ Bettbox / FlClash 系列专属版（`bettbox-flclash.js`）：
 | 设置 → 网络 → **追加系统 DNS** | **关闭**（默认）| 打开会向 `nameserver` 注入 `system://`，直接构成 DNS 泄露 |
 | 出站模式                     | 规则            | 全局 / 直连会绕开分流规则                               |
 | TUN 栈                       | mixed           | 其他栈在部分机型上兼容性较差                            |
-| 查找进程                     | off             | 手机端无进程规则，开启（App 默认 always）徒增开销       |
+| 查找进程                     | **桌面端 always** / 手机端 off | OpenCode 进程直连规则（`PROCESS-NAME,opencode`）依赖进程查找，关闭后只剩域名规则兜底；手机端无进程可查，开启徒增开销 |
 
 其余如 log-level / ipv6 / 各端口 / tcp-concurrent / unified-delay /
 keep-alive-interval / 「记住选择」等，同样以 App 设置为准。
@@ -157,7 +157,7 @@ keep-alive-interval / 「记住选择」等，同样以 App 设置为准。
 
 ### 自定义
 
-自定义常量位于 `src/user-config.ts`（三版共享）：
+自定义常量位于 `src/user-config.ts`（五版共享）：
 
 ```ts
 /** 强制直连的域名（后缀匹配），示例：["mycompany.com", "internal.example"] */
@@ -168,9 +168,22 @@ export const FORCE_PROXY_DOMAINS: string[] = [];
 export const CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3/i;
 ```
 
+**OpenCode（AI coding agent）不走代理**：脚本默认已内置（`OPENCODE_BYPASS`，
+也在 `src/user-config.ts`），规则为：
+
+- `PROCESS-NAME,opencode(+opencode.exe),DIRECT` —— 进程级直连，
+  覆盖模型 API、Console 网关、遥测等全部 OpenCode 出站流量
+- `DOMAIN-SUFFIX,opencode.ai / models.dev,DIRECT` —— 自家域名直连，
+  作为进程查找不可用时的保底（任何进程访问这两个域名都会直连，
+  含浏览器打开 console.opencode.ai，不适用时把 `domains` 清空）
+
+生效条件：**桌面端 App 需把「查找进程」设为 always**（手机端保持 off；
+FlClash/Bettbox 会用 App 设置覆盖脚本的 `find-process-mode`，脚本不干预）。
+不想直连时把 `OPENCODE_BYPASS.enabled` 置 `false`。
+
 两种修改方式：
 
-1. **推荐**：改 `src/user-config.ts` 后 `pnpm build` 重新生成（改动进入三份产物且不会丢失）
+1. **推荐**：改 `src/user-config.ts` 后 `pnpm build` 重新生成（改动进入五份产物且不会丢失）
 2. **临时**：直接编辑产物 JS 顶部的同名常量（在 IIFE 内第一段）——注意
    下次 `pnpm build` 会覆盖手改内容
 

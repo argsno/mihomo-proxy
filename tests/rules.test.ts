@@ -69,6 +69,37 @@ describe("buildStaticRules", () => {
   });
 });
 
+describe("OpenCode 直连预设（OPENCODE_BYPASS）", () => {
+  const full = buildStaticRules(FULL);
+  const simple = buildStaticRules(SIMPLE);
+
+  it("进程 + 自家域名直连规则存在", () => {
+    expect(full).toContain("PROCESS-NAME,opencode,DIRECT");
+    expect(full).toContain("PROCESS-NAME,opencode.exe,DIRECT");
+    expect(full).toContain("DOMAIN-SUFFIX,opencode.ai,DIRECT");
+    expect(full).toContain("DOMAIN-SUFFIX,models.dev,DIRECT");
+  });
+
+  it("位于 AI 规则集之前（防被 category-ai/anthropic 抢先分流）", () => {
+    const firstAiRule = full.findIndex((r) =>
+      /^RULE-SET,(openai|anthropic|category-ai),/.test(r),
+    );
+    for (const rule of [
+      "PROCESS-NAME,opencode,DIRECT",
+      "DOMAIN-SUFFIX,opencode.ai,DIRECT",
+    ]) {
+      const idx = full.indexOf(rule);
+      expect(idx).toBeGreaterThan(-1);
+      expect(idx).toBeLessThan(firstAiRule);
+    }
+  });
+
+  it("极简版同样注入（共享骨架）", () => {
+    expect(simple).toContain("PROCESS-NAME,opencode,DIRECT");
+    expect(simple).toContain("DOMAIN-SUFFIX,models.dev,DIRECT");
+  });
+});
+
 describe("pickDirectRules", () => {
   it("仅保留 DIRECT 规则，跳过注释与空行", () => {
     expect(

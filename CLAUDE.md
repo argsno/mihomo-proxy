@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pnpm install                  # Node 20+ / pnpm 11+
 pnpm typecheck                # tsc 类型检查
-pnpm test                     # vitest 单元测试（47 项）
+pnpm test                     # vitest 单元测试（50 项）
 pnpm test -- -t "关键词"       # 运行匹配的单测
 pnpm build                    # 五产物构建 → node:vm 冒烟断言 → 同步到仓库根目录
 pnpm verify:kernel            # 真实 mihomo 内核 -t 校验（需 MIHOMO_BIN 或本地内核）
@@ -79,6 +79,12 @@ pnpm verify:runtime           # 启动内核查 /proxies API，验 include-all/e
 - **`GLOBAL_DOH` 不含 8.8.8.8**：`respect-rules: true` 下 DoH 连接自身要过规则，8.8.8.8 会命中 `RULE-SET,google-ip,<Google 组>,no-resolve`，把 DNS 上游绑死在 Google 出口——Google 组一抖，Google 域名的解析跟着抖，单点故障放大成双重超时。改用 Quad9（9.9.9.9）解耦。
 - **桌面 `URL_TEST_EXTRA` 放宽到 600s / 100ms**：原 300/50 在跨境抖动下几乎每轮重选节点，长会话（Drive 上传、Gmail 长轮询、AI 流式响应）被反复打断，且出口 IP 变化又回头喂风控。
 
+### OpenCode 进程直连预设（`src/rules.ts`、`src/user-config.ts`、`src/runtime.ts`）
+- **`OPENCODE_BYPASS` 五版共享注入**：`PROCESS-NAME,opencode(+opencode.exe)` + `DOMAIN-SUFFIX,opencode.ai / models.dev`，位置在广告拦截之后、AI 规则集（openai/anthropic/category-ai 等）之前——opencode.ai/models.dev 可能被这些规则集收录，靠后会被分流组抢先匹配、「不走代理」失效；域名规则同时是进程查找不可用时的保底。
+- **端点结论（经 opencode.ai 官方文档核实）**：OpenCode 全部出站流量由 `opencode` 单二进制发出（进程级直连一次覆盖模型 API/网关/遥测）；自家服务都在 `opencode.ai` 后缀（Console/推理网关/auth/证书），模型目录是 `models.dev`；官方从不公布固定 IP，不写 IP-CIDR；TUI 与本地 server 的 127.0.0.1 连接已由 `private-ip` 直连规则覆盖。
+- **`find-process-mode` 从 `off` 改为 `strict`**：strict 是内核默认语义（存在 PROCESS-NAME 规则后才查进程），这是进程规则能生效的最低成本值。但 FlClash/Bettbox App 会强制改写该字段，脚本值在两端无效——文档已注明：桌面端 App 需把「查找进程」设为 always，手机端设为 off。
+- 用户改 Keyword 的口子：`OPENCODE_BYPASS.enabled/processes/domains`（user-config.ts），README「自定义」节已描述行为与取舍。
+
 ### Sniffer 端口区间（`src/runtime.ts`）
 HTTP 与 TLS 同为 TCP，端口区间**必须互斥**：原先 HTTP 的 `8080-8880` 覆盖了 TLS 的 `8443`，而两者 `override-destination` 取值相反，重叠即行为不确定（内核 v1.19.30 的 `coordinate TCP sniffers on overlapping ports` 才把这类冲突理顺）。现拆成 `8080-8442` + `8444-8880`。QUIC 走 UDP，与 TLS 同端口无妨。HTTP sniffer 自 v1.19.30 起顺带覆盖 H2C，QUIC 覆盖 QUICv2，均无需改配置。
 
@@ -96,5 +102,6 @@ HTTP 与 TLS 同为 TCP，端口区间**必须互斥**：原先 HTTP 的 `8080-8
 ### 用户自定义区（`src/user-config.ts`）
 - `BYPASS_DOMAINS`：后缀匹配，走 DIRECT
 - `FORCE_PROXY_DOMAINS`：精确匹配，走主代理组
+- `OPENCODE_BYPASS`：OpenCode（AI coding agent）进程 + 自家域名直连预设，默认开启（详见上方设计决策）
 - `CUSTOM_FILTER`：节点名过滤器正则，手机版会被编译进 `exclude-filter`，注意别让它命中「自动测速」「AI 自动测速」这两个组名
 - 推荐改源码后 `pnpm build` 重新生成，而非直接编辑产物

@@ -3,6 +3,7 @@ import {
   BLOCK_GOOGLE_QUIC,
   BYPASS_DOMAINS,
   FORCE_PROXY_DOMAINS,
+  OPENCODE_BYPASS,
 } from "./user-config";
 
 /**
@@ -37,6 +38,31 @@ const googleQuicRule = (enabled: boolean = BLOCK_GOOGLE_QUIC): string[] =>
     : [];
 
 /**
+ * OpenCode（AI coding agent）直连规则（OPENCODE_BYPASS 预设）。
+ * ------------------------------------------------------------------
+ * 进程规则 + 自家域名规则。必须放在 AI 规则集（openai / anthropic /
+ * category-ai 等）之前：opencode.ai / models.dev 可能被这些规则集
+ * 收录，位置靠后就先命中分流组、「进程不走代理」失效。
+ *
+ * 注意 PROCESS-NAME 规则依赖内核进程查找（find-process-mode 不能为
+ * off）。业务下端 App（FlClash/Bettbox）会强制覆写该字段，脚本内
+ * 写值无效，只能在 App 设置中切换（详见 README「查找进程」一节）。
+ */
+const openCodeRule = (enabled: boolean = OPENCODE_BYPASS.enabled): string[] =>
+  !enabled
+    ? []
+    : [
+        // 进程直连：一条覆盖模型 API、遥测、更新等全部出站连接
+        ...uniq(OPENCODE_BYPASS.processes).map(
+          (p) => `PROCESS-NAME,${p},DIRECT`,
+        ),
+        // 自家域名直连：进程查找不可用时的保底
+        ...uniq(OPENCODE_BYPASS.domains).map(
+          (d) => `DOMAIN-SUFFIX,${d},DIRECT`,
+        ),
+      ];
+
+/**
  * 分流出口目标映射接口。
  * 完整版/Bettbox 版独立服务分组，极简版收敛至「全部/AI/广告拦截」三组。
  */
@@ -64,6 +90,9 @@ export interface RuleTargets {
 export const buildStaticRules = (t: RuleTargets): string[] => [
   // 广告拦截
   `RULE-SET,category-ads-all,${t.adblock}`,
+
+  // OpenCode 直连（进程 + 自家域名；必须在 AI 规则集之前）
+  ...openCodeRule(),
 
   // 用户自定义
   ...uniq(BYPASS_DOMAINS).map((d) => `DOMAIN-SUFFIX,${d},DIRECT`),

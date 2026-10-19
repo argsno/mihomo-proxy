@@ -86,7 +86,8 @@ const BETTBOX = {
  *  1. 设置 → 网络 →「覆写 DNS」保持【关闭】
  *  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
  *  3. 出站模式选「规则」；TUN 栈选 mixed；
- *     「查找进程」建议设为 off
+ *     「查找进程」桌面端设为 always —— 本脚本内置 OpenCode 进程
+ *     直连规则（PROCESS-NAME,opencode），依赖进程查找；手机端设为 off
  *
  * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
  *
@@ -149,7 +150,7 @@ const FLCLASH = {
  *  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
  *     （打开会向 nameserver 注入 system://，直接构成 DNS 泄露）
  *  3. 出站模式选「规则」；TUN 栈选 mixed；
- *     「查找进程」建议设为 off（手机上无进程规则，开启徒增开销）
+ *     「查找进程」建议设为 off（手机上无进程可查，开启徒增开销）
  *  4. 上述之外，log-level / ipv6 / 各端口 / tcp-concurrent /
  *     unified-delay / keep-alive-interval / 记住选择 等，
  *     同样由 App 设置决定，脚本内的对应值不会生效。
@@ -205,7 +206,8 @@ const SMART = {
  *  1. 设置 → 网络 →「覆写 DNS」保持【关闭】
  *  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
  *  3. 出站模式选「规则」；TUN 栈选 mixed；
- *     「查找进程」建议设为 off
+ *     「查找进程」桌面端设为 always —— 本脚本内置 OpenCode 进程
+ *     直连规则（PROCESS-NAME,opencode），依赖进程查找；手机端设为 off
  *
  * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
  *

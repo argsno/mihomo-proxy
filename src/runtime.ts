@@ -12,7 +12,10 @@ export const applyRuntime = (cfg: ClashConfig): void => {
   cfg["log-level"] = "warning";
   cfg["tcp-concurrent"] = true; // 多 IP 并发握手，减少首包延迟
   cfg["unified-delay"] = true; // 统一延迟计算方式
-  cfg["find-process-mode"] = "off"; // 移动端/无进程分流场景关闭以节省性能
+  // 默认 strict（与内核默认一致）：仅当存在 PROCESS-NAME 规则时才查进程。
+  // OpenCode 直连预设依赖进程规则，这里不能写 off；App 端（FlClash/Bettbox）
+  // 会强制覆写本字段，生不生效以 App 设置为准（见 README「查找进程」）。
+  cfg["find-process-mode"] = "strict";
   cfg["keep-alive-interval"] = 30; // 30s TCP 心跳保活，降低 FCM 等长连接异常中断
   cfg["keep-alive-idle"] = 600;
   cfg.profile = {
