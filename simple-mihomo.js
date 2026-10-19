@@ -31,6 +31,41 @@ var __mihomoSimple = (function(exports) {
 	var FORCE_PROXY_DOMAINS = [];
 	/** 需要从订阅中剔除的节点名过滤器（正则） */
 	var CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3/i;
+	/**
+	* OpenCode（AI coding agent，opencode.ai）不走代理预设，五版产物共享。
+	*
+	* 背景：OpenCode 全部出站流量（模型 API、Console 网关、模型目录、
+	* 遥测）都由 `opencode` 单二进制进程发出，进程级直连即可一次覆盖；
+	* 额外把自家域名写直连，是为了在进程查找失效的环境（App 端
+	* find-process-mode 被强制覆写为 off、或后台进程缓存缺失）下，
+	* Console 登录与模型目录请求仍能直连。
+	*
+	* 注意：
+	* - domains 是 DOMAIN-SUFFIX，任何进程访问这些域名都会直连。
+	*   例如浏览器打开 console.opencode.ai 登录页也走直连，若你的
+	*   网络直连 opencode.ai 不通，请关闭开关改用纯进程方式。
+	* - 官方未公布固定 IP 段，故不做 IP-CIDR 层面的直连。
+	* - 该预设生成的 PROCESS-NAME 规则依赖进程查找生效，详见
+	*   `src/rules.ts` 与 README 中「查找进程」的说明。
+	*/
+	var OPENCODE_BYPASS = {
+		/** 总开关 */
+		enabled: true,
+		/**
+		* OpenCode 可执行文件进程名（PROCESS-NAME 精确匹配）。
+		* macOS/Linux 取二进制名 `opencode`；Windows 进程名带扩展名
+		* `opencode.exe`，两个都要列。安装方式（npm/brew/安装脚本）不同
+		* 只改变可执行路径，不改变进程名。
+		*/
+		processes: ["opencode", "opencode.exe"],
+		/**
+		* OpenCode 自家服务域名（DOMAIN-SUFFIX 后缀匹配）。
+		* - opencode.ai：Console / 推理网关 / auth / 证书与版本元数据
+		*   （api.、console.、cert. 等子域一并覆盖）
+		* - models.dev：provider 与模型目录（启动时拉取 api.json）
+		*/
+		domains: ["opencode.ai", "models.dev"]
+	};
 	//#endregion
 	//#region src/settings.ts
 	/**
@@ -396,11 +431,24 @@ var __mihomoSimple = (function(exports) {
 	];
 	var googleQuicRule = (enabled = true) => enabled ? [`AND,((NETWORK,udp),(DST-PORT,443),(OR,(${GOOGLE_QUIC_DOMAINS.map((d) => `(DOMAIN-SUFFIX,${d})`).join(",")}))),REJECT`] : [];
 	/**
+	* OpenCode（AI coding agent）直连规则（OPENCODE_BYPASS 预设）。
+	* ------------------------------------------------------------------
+	* 进程规则 + 自家域名规则。必须放在 AI 规则集（openai / anthropic /
+	* category-ai 等）之前：opencode.ai / models.dev 可能被这些规则集
+	* 收录，位置靠后就先命中分流组、「进程不走代理」失效。
+	*
+	* 注意 PROCESS-NAME 规则依赖内核进程查找（find-process-mode 不能为
+	* off）。业务下端 App（FlClash/Bettbox）会强制覆写该字段，脚本内
+	* 写值无效，只能在 App 设置中切换（详见 README「查找进程」一节）。
+	*/
+	var openCodeRule = (enabled = OPENCODE_BYPASS.enabled) => !enabled ? [] : [...uniq(OPENCODE_BYPASS.processes).map((p) => `PROCESS-NAME,${p},DIRECT`), ...uniq(OPENCODE_BYPASS.domains).map((d) => `DOMAIN-SUFFIX,${d},DIRECT`)];
+	/**
 	* 构建静态分流规则列表。
 	* - 顺序敏感：广告拦截 → 自定义 → 游戏直连 → 基础设施 → QUIC阻断 → AI → Google → 业务服务 → GFW → 国内直连 → MATCH
 	*/
 	var buildStaticRules = (t) => [
 		`RULE-SET,category-ads-all,${t.adblock}`,
+		...openCodeRule(),
 		...uniq(BYPASS_DOMAINS).map((d) => `DOMAIN-SUFFIX,${d},DIRECT`),
 		...uniq(FORCE_PROXY_DOMAINS).map((d) => `DOMAIN,${d},${t.proxy}`),
 		"DOMAIN-SUFFIX,wegame.com.cn,DIRECT",
@@ -579,7 +627,7 @@ var __mihomoSimple = (function(exports) {
 		cfg["log-level"] = "warning";
 		cfg["tcp-concurrent"] = true;
 		cfg["unified-delay"] = true;
-		cfg["find-process-mode"] = "off";
+		cfg["find-process-mode"] = "strict";
 		cfg["keep-alive-interval"] = 30;
 		cfg["keep-alive-idle"] = 600;
 		cfg.profile = {
