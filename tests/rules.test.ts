@@ -100,11 +100,11 @@ describe("OpenCode 直连预设（OPENCODE_BYPASS）", () => {
   });
 });
 
-describe("Qoder 走代理预设（QODER_PROXY）", () => {
+describe("Qoder 直连预设（QODER_BYPASS）", () => {
   const full = buildStaticRules(FULL);
   const simple = buildStaticRules(SIMPLE);
 
-  it("主进程与 Helper 进程均走代理", () => {
+  it("主进程与 Helper 进程均直连", () => {
     for (const proc of [
       "Qoder",
       "Qoder Helper",
@@ -112,30 +112,28 @@ describe("Qoder 走代理预设（QODER_PROXY）", () => {
       "Qoder Helper (Plugin)",
       "Qoder.exe",
     ]) {
-      expect(full).toContain(`PROCESS-NAME,${proc},main`);
-      expect(simple).toContain(`PROCESS-NAME,${proc},全部`);
+      expect(full).toContain(`PROCESS-NAME,${proc},DIRECT`);
+      expect(simple).toContain(`PROCESS-NAME,${proc},DIRECT`);
     }
   });
 
-  it("国际版自家域名走代理", () => {
-    expect(full).toContain("DOMAIN-SUFFIX,qoder.sh,main");
-    expect(simple).toContain("DOMAIN-SUFFIX,qoder.sh,全部");
+  it("国际版自家域名直连", () => {
+    expect(full).toContain("DOMAIN-SUFFIX,qoder.sh,DIRECT");
+    expect(simple).toContain("DOMAIN-SUFFIX,qoder.sh,DIRECT");
   });
 
-  it("位于 AI 与国内直连规则之前（防被抢先分流）", () => {
+  it("位于 AI 规则集之前（防被抢先分流）", () => {
     const firstAiRule = full.findIndex((r) =>
       /^RULE-SET,(openai|anthropic|category-ai),/.test(r),
     );
-    const cnRule = full.indexOf("RULE-SET,cn,DIRECT");
     for (const rule of [
-      "PROCESS-NAME,Qoder,main",
-      "PROCESS-NAME,Qoder Helper,main",
-      "DOMAIN-SUFFIX,qoder.sh,main",
+      "PROCESS-NAME,Qoder,DIRECT",
+      "PROCESS-NAME,Qoder Helper,DIRECT",
+      "DOMAIN-SUFFIX,qoder.sh,DIRECT",
     ]) {
       const idx = full.indexOf(rule);
       expect(idx).toBeGreaterThan(-1);
       expect(idx).toBeLessThan(firstAiRule);
-      expect(idx).toBeLessThan(cnRule);
     }
   });
 

@@ -147,7 +147,7 @@ Bettbox / FlClash 系列专属版（`bettbox-flclash.js`）：
 | 设置 → 网络 → **追加系统 DNS** | **关闭**（默认）| 打开会向 `nameserver` 注入 `system://`，直接构成 DNS 泄露 |
 | 出站模式                     | 规则            | 全局 / 直连会绕开分流规则                               |
 | TUN 栈                       | mixed           | 其他栈在部分机型上兼容性较差                            |
-| 查找进程                     | **桌面端 always** / 手机端 off | OpenCode 直连、Qoder 走代理的进程规则（`PROCESS-NAME,opencode / Qoder`）依赖进程查找，关闭后只剩域名规则兜底；手机端无进程可查，开启徒增开销 |
+| 查找进程                     | **桌面端 always** / 手机端 off | OpenCode / Qoder 直连的进程规则（`PROCESS-NAME,opencode / Qoder`）依赖进程查找，关闭后只剩域名规则兜底；手机端无进程可查，开启徒增开销 |
 
 其余如 log-level / ipv6 / 各端口 / tcp-concurrent / unified-delay /
 keep-alive-interval / 「记住选择」等，同样以 App 设置为准。
@@ -181,22 +181,21 @@ export const CUSTOM_FILTER = /示例占位符1|示例占位符2|示例占位符3
 FlClash/Bettbox 会用 App 设置覆盖脚本的 `find-process-mode`，脚本不干预）。
 不想直连时把 `OPENCODE_BYPASS.enabled` 置 `false`。
 
-**Qoder（AI coding IDE）走代理**：脚本默认已内置（`QODER_PROXY`，也在
+**Qoder（AI coding IDE）不走代理**：脚本默认已内置（`QODER_BYPASS`，也在
 `src/user-config.ts`），只覆盖国际版 `/Applications/Qoder.app`（`com.qoder.app`），
 国内版 `Qoder CN.app` 不受影响。规则为：
 
 - `PROCESS-NAME,Qoder / Qoder Helper / Qoder Helper (Renderer) /
-  Qoder Helper (Plugin),主代理组` —— 主进程（含它拉起的 agent / MCP
+  Qoder Helper (Plugin),DIRECT` —— 主进程（含它拉起的 agent / MCP
   子进程）与 Electron 网络服务 Helper 进程，覆盖全部出站流量。
   注意 HTTP(S) 实际由 Helper 发出，只写主进程名会漏掉大部分流量
-- `DOMAIN-SUFFIX,qoder.sh,主代理组` —— 登录（center）、推理网关
+- `DOMAIN-SUFFIX,qoder.sh,DIRECT` —— 登录（center）、推理网关
   （openapi / api2 / api3），作为进程查找不可用时的保底。刻意不含
   `qoder.com`：国内版的 gateway / openapi 走该后缀，写进去会连带
-  代理国内版；国际版的 qoder.com（静态资源、更新）由进程规则覆盖
+  把国内版改成直连；国际版的 qoder.com（静态资源、更新）由进程规则覆盖
 
-出口与 `FORCE_PROXY_DOMAINS` 相同：完整版走 `main` 组，极简版走「全部」组。
-生效条件同上（桌面端「查找进程」设为 always）；不想走代理时把
-`QODER_PROXY.enabled` 置 `false`。
+生效条件同上（桌面端「查找进程」设为 always）；不想直连时把
+`QODER_BYPASS.enabled` 置 `false`。
 
 两种修改方式：
 

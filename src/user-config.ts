@@ -67,19 +67,19 @@ export const OPENCODE_BYPASS = {
 };
 
 /**
- * Qoder（AI coding IDE）走代理预设，五版产物共享。
+ * Qoder（AI coding IDE）直连预设，五版产物共享。
  *
  * 范围：仅国际版 `/Applications/Qoder.app`（com.qoder.app）。国内版
  * `Qoder CN.app`（com.qodercn.app）进程名是 `Qoder CN`，不会被进程
  * 规则命中；其 API 走 `gateway.qoder.com` / `openapi.qoder.com`，
- * 所以 qoder.com 不能写进域名规则，否则会连带把国内版送进代理。
+ * 所以 qoder.com 不能写进域名规则，否则会连带把国内版改成直连。
  *
  * Qoder 是 Electron 多进程应用：HTTP(S) 请求实际由网络服务 Helper 进程
  * 发出，主进程只负责拉起 agent / MCP 等 Node 子进程，两者都要列。
  * 进程规则依赖进程查找（桌面端「查找进程」需为 always），域名规则是
  * 进程查找不可用时的保底。
  */
-export const QODER_PROXY = {
+export const QODER_BYPASS = {
   /** 总开关 */
   enabled: true,
 

@@ -4,7 +4,7 @@ import {
   BYPASS_DOMAINS,
   FORCE_PROXY_DOMAINS,
   OPENCODE_BYPASS,
-  QODER_PROXY,
+  QODER_BYPASS,
 } from "./user-config";
 
 /**
@@ -42,7 +42,7 @@ const googleQuicRule = (enabled: boolean = BLOCK_GOOGLE_QUIC): string[] =>
  * App 预设规则：进程 + 自家域名，出口由 target 决定。
  * ------------------------------------------------------------------
  * - OpenCode（OPENCODE_BYPASS）：直连
- * - Qoder（QODER_PROXY）：走代理组
+ * - Qoder（QODER_BYPASS）：直连
  *
  * 必须放在用户自定义与 AI / 国内直连规则之前：预设域名可能被
  * category-ai / cn 等规则集收录，位置靠后就会被抢先分流。
@@ -95,7 +95,7 @@ export const buildStaticRules = (t: RuleTargets): string[] => [
 
   // App 预设（进程 + 自家域名；必须在 AI / 国内直连规则之前）
   ...appPresetRules(OPENCODE_BYPASS, "DIRECT"),
-  ...appPresetRules(QODER_PROXY, t.proxy),
+  ...appPresetRules(QODER_BYPASS, "DIRECT"),
 
   // 用户自定义
   ...uniq(BYPASS_DOMAINS).map((d) => `DOMAIN-SUFFIX,${d},DIRECT`),
