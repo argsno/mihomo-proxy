@@ -100,6 +100,52 @@ describe("OpenCode 直连预设（OPENCODE_BYPASS）", () => {
   });
 });
 
+describe("Qoder 走代理预设（QODER_PROXY）", () => {
+  const full = buildStaticRules(FULL);
+  const simple = buildStaticRules(SIMPLE);
+
+  it("主进程与 Helper 进程均走代理", () => {
+    for (const proc of [
+      "Qoder",
+      "Qoder Helper",
+      "Qoder Helper (Renderer)",
+      "Qoder Helper (Plugin)",
+      "Qoder.exe",
+    ]) {
+      expect(full).toContain(`PROCESS-NAME,${proc},main`);
+      expect(simple).toContain(`PROCESS-NAME,${proc},全部`);
+    }
+  });
+
+  it("国际版自家域名走代理", () => {
+    expect(full).toContain("DOMAIN-SUFFIX,qoder.sh,main");
+    expect(simple).toContain("DOMAIN-SUFFIX,qoder.sh,全部");
+  });
+
+  it("位于 AI 与国内直连规则之前（防被抢先分流）", () => {
+    const firstAiRule = full.findIndex((r) =>
+      /^RULE-SET,(openai|anthropic|category-ai),/.test(r),
+    );
+    const cnRule = full.indexOf("RULE-SET,cn,DIRECT");
+    for (const rule of [
+      "PROCESS-NAME,Qoder,main",
+      "PROCESS-NAME,Qoder Helper,main",
+      "DOMAIN-SUFFIX,qoder.sh,main",
+    ]) {
+      const idx = full.indexOf(rule);
+      expect(idx).toBeGreaterThan(-1);
+      expect(idx).toBeLessThan(firstAiRule);
+      expect(idx).toBeLessThan(cnRule);
+    }
+  });
+
+  it("不误伤国内版 Qoder CN（进程名与共享域名）", () => {
+    expect(full.some((rule) => rule.includes("Qoder CN"))).toBe(false);
+    // 国内版 gateway/openapi 在 qoder.com 下，域名规则不能收录
+    expect(full.some((rule) => rule.includes("qoder.com"))).toBe(false);
+  });
+});
+
 describe("pickDirectRules", () => {
   it("仅保留 DIRECT 规则，跳过注释与空行", () => {
     expect(
@@ -132,9 +178,8 @@ describe("mergeRules", () => {
     expect(out).not.toBe(base);
   });
   it("无 MATCH 时追加并去重", () => {
-    expect(mergeRules(["RULE-SET,a,X"], ["RULE-SET,a,X", "D,u,DIRECT"])).toEqual([
-      "RULE-SET,a,X",
-      "D,u,DIRECT",
-    ]);
+    expect(
+      mergeRules(["RULE-SET,a,X"], ["RULE-SET,a,X", "D,u,DIRECT"]),
+    ).toEqual(["RULE-SET,a,X", "D,u,DIRECT"]);
   });
 });

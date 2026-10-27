@@ -67,6 +67,51 @@ export const OPENCODE_BYPASS = {
 };
 
 /**
+ * Qoder（AI coding IDE）走代理预设，五版产物共享。
+ *
+ * 范围：仅国际版 `/Applications/Qoder.app`（com.qoder.app）。国内版
+ * `Qoder CN.app`（com.qodercn.app）进程名是 `Qoder CN`，不会被进程
+ * 规则命中；其 API 走 `gateway.qoder.com` / `openapi.qoder.com`，
+ * 所以 qoder.com 不能写进域名规则，否则会连带把国内版送进代理。
+ *
+ * Qoder 是 Electron 多进程应用：HTTP(S) 请求实际由网络服务 Helper 进程
+ * 发出，主进程只负责拉起 agent / MCP 等 Node 子进程，两者都要列。
+ * 进程规则依赖进程查找（桌面端「查找进程」需为 always），域名规则是
+ * 进程查找不可用时的保底。
+ */
+export const QODER_PROXY = {
+  /** 总开关 */
+  enabled: true,
+
+  /**
+   * 进程名（PROCESS-NAME 精确匹配）。
+   * - `Qoder`：主程序，同时承接它拉起的 Node 子进程（agent SDK、
+   *   search daemon、MCP server 等都以主二进制名运行）
+   * - `Qoder Helper`：Electron 网络服务进程，真正发包的一端
+   * - `Qoder Helper (Renderer)` / `Qoder Helper (Plugin)`：渲染进程
+   *   与扩展宿主，兜底
+   * - Windows 上 Electron 的子进程都跑在 `Qoder.exe` 下
+   */
+  processes: [
+    "Qoder",
+    "Qoder Helper",
+    "Qoder Helper (Renderer)",
+    "Qoder Helper (Plugin)",
+    "Qoder.exe",
+  ],
+
+  /**
+   * 国际版自家服务域名（DOMAIN-SUFFIX 后缀匹配）。
+   * - qoder.sh：center（登录/账号）、openapi、api2/api3（推理网关）
+   *
+   * 刻意不含 qoder.com：国内版 Qoder CN 的 gateway / openapi / docs /
+   * static 都在该后缀下，写进去会连带代理国内版。国际版的 qoder.com
+   * （静态资源、更新）由进程规则覆盖。
+   */
+  domains: ["qoder.sh"],
+};
+
+/**
  * smart 组节点优先级（仅 bettbox-smart 变体生效；留空表示不设置）。
  *
  * 格式 "正则:系数;正则:系数"，对节点名做正则匹配，第一个命中的规则生效；

@@ -86,8 +86,9 @@ const BETTBOX = {
  *  1. 设置 → 网络 →「覆写 DNS」保持【关闭】
  *  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
  *  3. 出站模式选「规则」；TUN 栈选 mixed；
- *     「查找进程」桌面端设为 always —— 本脚本内置 OpenCode 进程
- *     直连规则（PROCESS-NAME,opencode），依赖进程查找；手机端设为 off
+ *     「查找进程」桌面端设为 always —— 本脚本内置 OpenCode 直连与
+ *     Qoder 走代理的进程规则（PROCESS-NAME,opencode / Qoder），
+ *     依赖进程查找；手机端设为 off
  *
  * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
  *
@@ -206,8 +207,9 @@ const SMART = {
  *  1. 设置 → 网络 →「覆写 DNS」保持【关闭】
  *  2. 设置 → 网络 →「追加系统 DNS」保持【关闭】
  *  3. 出站模式选「规则」；TUN 栈选 mixed；
- *     「查找进程」桌面端设为 always —— 本脚本内置 OpenCode 进程
- *     直连规则（PROCESS-NAME,opencode），依赖进程查找；手机端设为 off
+ *     「查找进程」桌面端设为 always —— 本脚本内置 OpenCode 直连与
+ *     Qoder 走代理的进程规则（PROCESS-NAME,opencode / Qoder），
+ *     依赖进程查找；手机端设为 off
  *
  * 本文件由 vite build 自动生成，请勿手改；源码见 src/ 目录。
  *

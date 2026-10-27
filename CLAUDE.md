@@ -17,7 +17,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 pnpm install                  # Node 20+ / pnpm 11+
 pnpm typecheck                # tsc 类型检查
-pnpm test                     # vitest 单元测试（50 项）
+pnpm test                     # vitest 单元测试（54 项）
 pnpm test -- -t "关键词"       # 运行匹配的单测
 pnpm build                    # 五产物构建 → node:vm 冒烟断言 → 同步到仓库根目录
 pnpm verify:kernel            # 真实 mihomo 内核 -t 校验（需 MIHOMO_BIN 或本地内核）
@@ -85,6 +85,12 @@ pnpm verify:runtime           # 启动内核查 /proxies API，验 include-all/e
 - **`find-process-mode` 从 `off` 改为 `strict`**：strict 是内核默认语义（存在 PROCESS-NAME 规则后才查进程），这是进程规则能生效的最低成本值。但 FlClash/Bettbox App 会强制改写该字段，脚本值在两端无效——文档已注明：桌面端 App 需把「查找进程」设为 always，手机端设为 off。
 - 用户改 Keyword 的口子：`OPENCODE_BYPASS.enabled/processes/domains`（user-config.ts），README「自定义」节已描述行为与取舍。
 
+### Qoder 进程走代理预设（`src/rules.ts`、`src/user-config.ts`、`src/runtime.ts`）
+- **`QODER_PROXY` 五版共享注入**：`PROCESS-NAME,Qoder / Qoder Helper / Qoder Helper (Renderer) / Qoder Helper (Plugin) (+Qoder.exe)` + `DOMAIN-SUFFIX,qoder.sh`，出口取 `t.proxy`（完整版 `main`、极简版「全部」），位置在 OpenCode 预设之后、用户自定义与 AI / 国内直连规则之前——qoder.sh 的推理网关一旦落到 `category-ai` 或 `cn` / `cn-ip` 就会偏离预期出口。
+- **必须列 Helper 进程名**：Qoder 是 Electron 应用，HTTP(S) 由网络服务 Helper（`Qoder Helper`）发出，主进程只负责拉起 agent / MCP 等 Node 子进程；只写 `Qoder` 会漏掉主要流量。Helper 名含空格与括号，`PROCESS-NAME` 精确匹配可直接使用。
+- **范围仅国际版**：进程名与域名取自 `/Applications/Qoder.app`（`com.qoder.app`，实测 `center.qoder.sh` / `openapi.qoder.sh` / `api2|api3.qoder.sh`）。国内版 `Qoder CN.app`（`com.qodercn.app`）进程名是 `Qoder CN`，且 API 走 `gateway.qoder.com` / `openapi.qoder.com`——因此 `qoder.com` **不能**写进域名规则，否则会连带代理国内版；国际版的 qoder.com（静态资源、更新）由进程规则覆盖。测试里有对应断言防回归。
+- **与 OpenCode 的区别**：两者共用 `appPresetRules(preset, target)` 构建器，OpenCode 传 `DIRECT`、Qoder 传 `t.proxy`。进程/域名规则依赖 `find-process-mode`，同 OpenCode 的 App 端限制。
+
 ### Sniffer 端口区间（`src/runtime.ts`）
 HTTP 与 TLS 同为 TCP，端口区间**必须互斥**：原先 HTTP 的 `8080-8880` 覆盖了 TLS 的 `8443`，而两者 `override-destination` 取值相反，重叠即行为不确定（内核 v1.19.30 的 `coordinate TCP sniffers on overlapping ports` 才把这类冲突理顺）。现拆成 `8080-8442` + `8444-8880`。QUIC 走 UDP，与 TLS 同端口无妨。HTTP sniffer 自 v1.19.30 起顺带覆盖 H2C，QUIC 覆盖 QUICv2，均无需改配置。
 
@@ -103,5 +109,6 @@ HTTP 与 TLS 同为 TCP，端口区间**必须互斥**：原先 HTTP 的 `8080-8
 - `BYPASS_DOMAINS`：后缀匹配，走 DIRECT
 - `FORCE_PROXY_DOMAINS`：精确匹配，走主代理组
 - `OPENCODE_BYPASS`：OpenCode（AI coding agent）进程 + 自家域名直连预设，默认开启（详见上方设计决策）
+- `QODER_PROXY`：Qoder（国际版 AI coding IDE）进程 + 自家域名走代理预设，默认开启（详见上方设计决策）
 - `CUSTOM_FILTER`：节点名过滤器正则，手机版会被编译进 `exclude-filter`，注意别让它命中「自动测速」「AI 自动测速」这两个组名
 - 推荐改源码后 `pnpm build` 重新生成，而非直接编辑产物
