@@ -67,19 +67,19 @@ var __mihomoSimple = (function(exports) {
 		domains: ["opencode.ai", "models.dev"]
 	};
 	/**
-	* Qoder（AI coding IDE）走代理预设，五版产物共享。
+	* Qoder（AI coding IDE）直连预设，五版产物共享。
 	*
 	* 范围：仅国际版 `/Applications/Qoder.app`（com.qoder.app）。国内版
 	* `Qoder CN.app`（com.qodercn.app）进程名是 `Qoder CN`，不会被进程
 	* 规则命中；其 API 走 `gateway.qoder.com` / `openapi.qoder.com`，
-	* 所以 qoder.com 不能写进域名规则，否则会连带把国内版送进代理。
+	* 所以 qoder.com 不能写进域名规则，否则会连带把国内版改成直连。
 	*
 	* Qoder 是 Electron 多进程应用：HTTP(S) 请求实际由网络服务 Helper 进程
 	* 发出，主进程只负责拉起 agent / MCP 等 Node 子进程，两者都要列。
 	* 进程规则依赖进程查找（桌面端「查找进程」需为 always），域名规则是
 	* 进程查找不可用时的保底。
 	*/
-	var QODER_PROXY = {
+	var QODER_BYPASS = {
 		/** 总开关 */
 		enabled: true,
 		/**
@@ -476,7 +476,7 @@ var __mihomoSimple = (function(exports) {
 	* App 预设规则：进程 + 自家域名，出口由 target 决定。
 	* ------------------------------------------------------------------
 	* - OpenCode（OPENCODE_BYPASS）：直连
-	* - Qoder（QODER_PROXY）：走代理组
+	* - Qoder（QODER_BYPASS）：直连
 	*
 	* 必须放在用户自定义与 AI / 国内直连规则之前：预设域名可能被
 	* category-ai / cn 等规则集收录，位置靠后就会被抢先分流。
@@ -493,7 +493,7 @@ var __mihomoSimple = (function(exports) {
 	var buildStaticRules = (t) => [
 		`RULE-SET,category-ads-all,${t.adblock}`,
 		...appPresetRules(OPENCODE_BYPASS, "DIRECT"),
-		...appPresetRules(QODER_PROXY, t.proxy),
+		...appPresetRules(QODER_BYPASS, "DIRECT"),
 		...uniq(BYPASS_DOMAINS).map((d) => `DOMAIN-SUFFIX,${d},DIRECT`),
 		...uniq(FORCE_PROXY_DOMAINS).map((d) => `DOMAIN,${d},${t.proxy}`),
 		"DOMAIN-SUFFIX,wegame.com.cn,DIRECT",
