@@ -81,6 +81,48 @@ var __mihomoFlClash = (function(exports) {
 		*/
 		domains: ["opencode.ai", "models.dev"]
 	};
+	/**
+	* Qoder（AI coding IDE）走代理预设，五版产物共享。
+	*
+	* 范围：仅国际版 `/Applications/Qoder.app`（com.qoder.app）。国内版
+	* `Qoder CN.app`（com.qodercn.app）进程名是 `Qoder CN`，不会被进程
+	* 规则命中；其 API 走 `gateway.qoder.com` / `openapi.qoder.com`，
+	* 所以 qoder.com 不能写进域名规则，否则会连带把国内版送进代理。
+	*
+	* Qoder 是 Electron 多进程应用：HTTP(S) 请求实际由网络服务 Helper 进程
+	* 发出，主进程只负责拉起 agent / MCP 等 Node 子进程，两者都要列。
+	* 进程规则依赖进程查找（桌面端「查找进程」需为 always），域名规则是
+	* 进程查找不可用时的保底。
+	*/
+	var QODER_PROXY = {
+		/** 总开关 */
+		enabled: true,
+		/**
+		* 进程名（PROCESS-NAME 精确匹配）。
+		* - `Qoder`：主程序，同时承接它拉起的 Node 子进程（agent SDK、
+		*   search daemon、MCP server 等都以主二进制名运行）
+		* - `Qoder Helper`：Electron 网络服务进程，真正发包的一端
+		* - `Qoder Helper (Renderer)` / `Qoder Helper (Plugin)`：渲染进程
+		*   与扩展宿主，兜底
+		* - Windows 上 Electron 的子进程都跑在 `Qoder.exe` 下
+		*/
+		processes: [
+			"Qoder",
+			"Qoder Helper",
+			"Qoder Helper (Renderer)",
+			"Qoder Helper (Plugin)",
+			"Qoder.exe"
+		],
+		/**
+		* 国际版自家服务域名（DOMAIN-SUFFIX 后缀匹配）。
+		* - qoder.sh：center（登录/账号）、openapi、api2/api3（推理网关）
+		*
+		* 刻意不含 qoder.com：国内版 Qoder CN 的 gateway / openapi / docs /
+		* static 都在该后缀下，写进去会连带代理国内版。国际版的 qoder.com
+		* （静态资源、更新）由进程规则覆盖。
+		*/
+		domains: ["qoder.sh"]
+	};
 	//#endregion
 	//#region src/settings.ts
 	/**
@@ -381,24 +423,27 @@ var __mihomoFlClash = (function(exports) {
 	];
 	var googleQuicRule = (enabled = true) => enabled ? [`AND,((NETWORK,udp),(DST-PORT,443),(OR,(${GOOGLE_QUIC_DOMAINS.map((d) => `(DOMAIN-SUFFIX,${d})`).join(",")}))),REJECT`] : [];
 	/**
-	* OpenCode（AI coding agent）直连规则（OPENCODE_BYPASS 预设）。
+	* App 预设规则：进程 + 自家域名，出口由 target 决定。
 	* ------------------------------------------------------------------
-	* 进程规则 + 自家域名规则。必须放在 AI 规则集（openai / anthropic /
-	* category-ai 等）之前：opencode.ai / models.dev 可能被这些规则集
-	* 收录，位置靠后就先命中分流组、「进程不走代理」失效。
+	* - OpenCode（OPENCODE_BYPASS）：直连
+	* - Qoder（QODER_PROXY）：走代理组
+	*
+	* 必须放在用户自定义与 AI / 国内直连规则之前：预设域名可能被
+	* category-ai / cn 等规则集收录，位置靠后就会被抢先分流。
 	*
 	* 注意 PROCESS-NAME 规则依赖内核进程查找（find-process-mode 不能为
 	* off）。业务下端 App（FlClash/Bettbox）会强制覆写该字段，脚本内
 	* 写值无效，只能在 App 设置中切换（详见 README「查找进程」一节）。
 	*/
-	var openCodeRule = (enabled = OPENCODE_BYPASS.enabled) => !enabled ? [] : [...uniq(OPENCODE_BYPASS.processes).map((p) => `PROCESS-NAME,${p},DIRECT`), ...uniq(OPENCODE_BYPASS.domains).map((d) => `DOMAIN-SUFFIX,${d},DIRECT`)];
+	var appPresetRules = (preset, target) => !preset.enabled ? [] : [...uniq(preset.processes).map((p) => `PROCESS-NAME,${p},${target}`), ...uniq(preset.domains).map((d) => `DOMAIN-SUFFIX,${d},${target}`)];
 	/**
 	* 构建静态分流规则列表。
 	* - 顺序敏感：广告拦截 → 自定义 → 游戏直连 → 基础设施 → QUIC阻断 → AI → Google → 业务服务 → GFW → 国内直连 → MATCH
 	*/
 	var buildStaticRules = (t) => [
 		`RULE-SET,category-ads-all,${t.adblock}`,
-		...openCodeRule(),
+		...appPresetRules(OPENCODE_BYPASS, "DIRECT"),
+		...appPresetRules(QODER_PROXY, t.proxy),
 		...uniq(BYPASS_DOMAINS).map((d) => `DOMAIN-SUFFIX,${d},DIRECT`),
 		...uniq(FORCE_PROXY_DOMAINS).map((d) => `DOMAIN,${d},${t.proxy}`),
 		"DOMAIN-SUFFIX,wegame.com.cn,DIRECT",
